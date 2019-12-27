@@ -50,7 +50,9 @@ def gen_tree_node_conditions(n, m, total_nodes):
     
         internal_node_t_condition.add_clause([x for x in range(2, n*total_nodes+2, total_nodes)] + [-1 * (final_i_val + 2 + k*total_nodes)])
     
-    node_conditions = [i_condition, t_condition]
+    node_conditions = [i_condition, leaf_i_condition, root_t_condition, internal_node_t_condition, leaf_t_condition]
+
+    max_val = final_i_val + m*total_nodes
 
     return node_conditions, max_val
 
