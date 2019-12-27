@@ -4,7 +4,7 @@ import subprocess
 import numpy as np
 import time
 from enum import Enum
-import Condition
+from Condition import Condition
 
 class Solver(Enum):
     PLINGELING = 0
@@ -23,6 +23,41 @@ def parse_input(path):
 
     return mats
 
+
+def gen_tree_node_conditions(n, m, total_nodes):
+    # Each leaf must be included in the tree (I(l, k, l) = True)
+    root_i_clause = [1]
+    node_i_clause = list(range(2, n+m+2))
+
+    i_condition = Condition([root_i_clause] + [node_i_clause], True, n*m, total_nodes)
+
+    leaf_i_condition = Condition(list(), True, m, n*total_nodes)
+
+    for l in range(n):
+        for i, val in enumerate(range(n+m+2, total_nodes+1)):
+            leaf_i_condition.add_clause([(-1 if i != l else 1) * (l * (total_nodes) + val)])
+
+    final_i_val = n * m * total_nodes
+
+    root_t_condition = Condition([[final_i_val + 1]], True, m, total_nodes)
+    leaf_t_condition = Condition([[x + final_i_val + n + m + 2] for x in range(n)], True, m, total_nodes)
+    # m commodities and n+m internal nodes
+    internal_node_t_condition = Condition(list(), True, n+m, 1)
+
+    for k in range(m):
+        for l in range(n):
+            internal_node_t_condition.add_clause([-1 * (2 + (k*n+l)*total_nodes), final_i_val + 2 + k*total_nodes])
+    
+        internal_node_t_condition.add_clause([x for x in range(2, n*total_nodes+2, total_nodes)] + [-1 * (final_i_val + 2 + k*total_nodes)])
+    
+    node_conditions = [i_condition, t_condition]
+
+    return node_conditions, max_val
+
+def gen_tree_edge_conditions(input):
+    edge_conditions = Condition()
+    return edge_conditions
+
 def gen_tree_conditions(input):
     # Have adjacency mat for edges?
     # characters = columns
@@ -33,6 +68,8 @@ def gen_tree_conditions(input):
     total_nodes = 1 + num_internal_nodes + n # root + internal + leaves
     # one edge from root to each internal node, all internal nodes connected (w/o cycles, so same as undirected handshake problem), one node from each internal node to each leaf
     num_edges = num_internal_nodes + (num_internal_nodes * (num_internal_nodes - 1))//2 + num_internal_nodes * n 
+
+    node_conditions, final_node_var = gen_tree_node_conditions(n, m, total_nodes)
 
     for l in range(n):
         for c in range(m):
