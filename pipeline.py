@@ -56,9 +56,25 @@ def gen_tree_node_conditions(n, m, total_nodes):
 
     return node_conditions, max_val
 
-def gen_tree_edge_conditions(input):
-    edge_conditions = Condition()
-    return edge_conditions
+def gen_tree_edge_conditions(node_conditions, n, m, total_nodes, num_node_vars):
+    f_condition = Condition(list(), True, total_nodes*n*m, total_nodes - 1)
+
+    for j in range(1, m+n+1):
+        for i in range(j):
+            f_condition.add_clause([j*n + 1, -1*(num_node_vars + j*(j-1)//2 + i + 1)])
+        f_condition.add_clause([-1*(j*n + 1)] + list(range(num_node_vars + j*(j-1)//2 + 1, num_node_vars + j*(j-1)//2 + i + 2)))
+
+    for j in range(1, n+1):
+        for i in range(m+n):
+            f_condition.add_clause([(m+n+j)*n + 1, -1*(num_node_vars + (m+n)*(m+n-1)//2 + j * (m+n) + i + 1)])
+        f_condition.add_clause([-1*((m+n+j)*n + 1)] + list(range(num_node_vars + (m+n)*(m+n-1)//2 + j * (m+n) + 1, num_node_vars + (m+n)*(m+n-1)//2 + i + j * (m+n) + 2)))
+
+    x_condition = Condition(list(), True, total_nodes*n*m, total_nodes - 1)
+    edge_conditions = [f_condition, x_condition]
+
+    max_val = num_node_vars + total_nodes*(n*m + total_nodes*n*m)
+
+    return edge_conditions, max_val
 
 def gen_tree_conditions(input):
     # Have adjacency mat for edges?
@@ -72,6 +88,7 @@ def gen_tree_conditions(input):
     num_edges = num_internal_nodes + (num_internal_nodes * (num_internal_nodes - 1))//2 + num_internal_nodes * n 
 
     node_conditions, final_node_var = gen_tree_node_conditions(n, m, total_nodes)
+    edge_conditions, final_edge_var = gen_tree_edge_conditions(node_conditions, n, m, total_nodes, final_node_var)
 
     for l in range(n):
         for c in range(m):
