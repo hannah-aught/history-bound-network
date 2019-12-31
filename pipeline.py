@@ -26,22 +26,12 @@ def parse_input(path):
 
 def gen_tree_node_conditions(n, m):
     # Each leaf must be included in the tree (I(l, k, l) = True)
-    # root_i_clause = [1]
-    node_i_clause = list(range(1, n+m+1))
-
-    i_condition = Condition([node_i_clause], True, n*m, n+m)
-
-    #leaf_i_condition = Condition(list(), True, m, n*total_nodes)
-
-    #for l in range(n):
-        #for i, val in enumerate(range(n+m+2, total_nodes+1)):
-            #leaf_i_condition.add_clause([(-1 if i != l else 1) * (l * (total_nodes) + val)])
+    i_condition = Condition(list(range(1, n+m+1)), True, n*m, n+m)
 
     final_i_val = n * m * (n+m)
 
-    #root_t_condition = Condition([[final_i_val + 1]], True, m, total_nodes)
-    #leaf_t_condition = Condition([[x + final_i_val + n + m + 2] for x in range(n)], True, m, total_nodes)
     # m commodities and n+m internal nodes
+    # commodities can't be repeated over using the Condition (requires adding a different number to first elements than last), but each node can be
     t_condition = Condition(list(), True, n+m, 1)
 
     for k in range(m):
@@ -57,24 +47,46 @@ def gen_tree_node_conditions(n, m):
     return node_conditions, max_val
 
 def gen_tree_edge_conditions(node_conditions, n, m, total_nodes, num_node_vars):
-    f_condition = Condition(list(), True, total_nodes*n*m, total_nodes - 1)
+    f_condition_1 = Condition(list(), True, n*m, total_nodes - 1)
 
     for j in range(1, m+n+1):
         for i in range(j):
-            f_condition.add_clause([j + 1, -1*(num_node_vars + j*(j-1)//2 + i + 1)])
-        f_condition.add_clause([-1*(j + 1)] + list(range(num_node_vars + j*(j-1)//2 + 1, num_node_vars + j*(j-1)//2 + i + 2)))
+            f_condition_1.add_clause([j + 1, -1*(num_node_vars + j*(j-1)//2 + i + 1)])
+        f_condition_1.add_clause([-1*(j + 1)] + list(range(num_node_vars + j*(j-1)//2 + 1, num_node_vars + j*(j-1)//2 + i + 2)))
 
-    leaf_f_condition = Condition(list(), True, m, total_nodes - 1)
+    last_internal_edge_var = num_node_vars + (m+n)*(m+n+1)//2
 
-    for l in range(1, n+1):
-        leaf_f_condition.add_clause(list(range(num_node_vars + (m+n)*(m+n-1)//2 + l*(m+n) + 1, num_node_vars + (m+n)*(m+n-1)//2 + (l+1)*(m+n) + 1)))
+    # clause for leaf 1 (at least one edge to leaf 1 must be included)
+    f_condition_1.add_clause(list(range(last_internal_edge_var + 1, last_internal_edge_var + m + n + 1)))
 
-    x_condition = Condition(list(), True, total_nodes*n*m, total_nodes - 1)
-    edge_conditions = [f_condition, x_condition]
+    f_condition_2 = Condition(list(), True, n*m, total_nodes-1)
 
-    max_val = num_node_vars + total_nodes*(n*m + total_nodes*n*m)
+    num_f_vars = n*m*(last_internal_edge_var + m + n - num_node_vars)
+    x_var_num = num_f_vars + 2
 
-    return edge_conditions, max_val
+    x_condition = Condition([[-1 * (num_node_vars + 1), num_f_vars + 1], [num_node_vars + 1, -1 * (num_f_vars + 1)]], True, total_nodes*n*m, total_nodes - 1)
+
+    step = 4
+    clause_index = 4
+
+    while step <= m+n+2:
+        for i in range(1, len(f_condition_1.clauses[clause_index])-1):
+            for j in range(j+1, len(f_condition_1.clauses[clause_index])):
+                f_condition_2.add_clause([-1*f_condition_1.clauses[clause_index][i], -1*f_condition_1.clauses[clause_index][j]])
+            x_condition.add_clause([-1*f_condition_1.clauses[clause_index][i], x_var_num])
+        x_condition.add_clause([-1*f_condition_1.clauses[clause_index][i+1], x_var_num])
+        x_condition.add_clause(f_condition_1.clauses[clause_index][1:] + [-1 * x_var_num])
+        clause_index = clause_index + step
+        x_var_num = x_var_num + 1
+        step = step + 1
+
+    for x in f_condition_1.clauses[-1]:
+        x_condition.add_clause([-1*x, x_var_num])
+    x_condition.add_clause(f_condition_1.clauses[-1][1:] + [x_var_num])
+
+    edge_conditions = [f_condition_1, f_condition_2, x_condition]
+    max_val = num_node_vars + num_f_vars + m*(x_var_num - num_f_vars)
+    return edge_conditions, x_var_num
 
 def gen_tree_conditions(input):
     # Have adjacency mat for edges?
