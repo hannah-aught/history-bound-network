@@ -26,7 +26,7 @@ def parse_input(path):
 
 def gen_tree_node_conditions(n, m):
     # Each leaf must be included in the tree (I(l, k, l) = True)
-    i_condition = Condition(list(range(1, n+m+1)), True, n*m, n+m)
+    i_condition = Condition([list(range(1, n+m+2))], True, n*m, n+m+1)
 
     final_i_val = n * m * (n+m)
 
@@ -46,7 +46,7 @@ def gen_tree_node_conditions(n, m):
 
     return node_conditions, max_val
 
-def gen_tree_edge_conditions(node_conditions, n, m, total_nodes, num_node_vars):
+def gen_tree_edge_conditions(n, m, total_nodes, num_node_vars):
     f_condition_1 = Condition(list(), True, n*m, total_nodes - 1)
 
     for j in range(1, m+n+1):
@@ -88,43 +88,59 @@ def gen_tree_edge_conditions(node_conditions, n, m, total_nodes, num_node_vars):
     max_val = num_node_vars + num_f_vars + m*(x_var_num - num_f_vars)
     return edge_conditions, x_var_num
 
-def gen_tree_conditions(input):
+def gen_tree_conditions(n, m):
     # Have adjacency mat for edges?
     # characters = columns
     # taxa = rows
-    n = input.shape[0] # number of rows (and leaves)
-    m = input.shape[1] # number of columns
     num_internal_nodes = n + m
     total_nodes = 1 + num_internal_nodes + n # root + internal + leaves
-    # one edge from root to each internal node, all internal nodes connected (w/o cycles, so same as undirected handshake problem), one node from each internal node to each leaf
-    num_edges = num_internal_nodes + (num_internal_nodes * (num_internal_nodes - 1))//2 + num_internal_nodes * n 
 
     node_conditions, final_node_var = gen_tree_node_conditions(n, m)
-    edge_conditions, final_edge_var = gen_tree_edge_conditions(node_conditions, n, m, total_nodes, final_node_var)
+    edge_conditions, final_edge_var = gen_tree_edge_conditions(n, m, total_nodes, final_node_var)
 
-    for l in range(n):
-        for c in range(m):
-            for i in range(1, num_internal_nodes + 1):
-                continue
-                # I(i, c, l) variables
+    conditions = [node_conditions, edge_conditions]
+    return conditions, final_node_var, final_edge_var
 
-    for l in range(n):
-        for c in range(m):
-            for i in range(1, num_internal_nodes):
-                for j in range(i, num_internal_nodes + 1):
-                    continue
-                    # f(i,j,c,l) variables
-
-    for j in range (num_internal_nodes):
-        continue
-        # R(j) variables (objective)
-        # Should this go here or in its own function like in prototein problem?
-    
-
+def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
     conditions = list()
-    return conditions
+    total_nodes = 2 * n + m + 1
+    i_offset = n*m*(n+m)
+    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 2)]], True, m*(n+m), 1)
+    rct_condition_2 = Condition(list(), True, m, n+m+1)
 
-def gen_subtree_conditions(input):
+    # Root can't be the root of the subtree
+    rct_condition_2.add_clause([-1*(final_edge_var + 1)])
+
+    for i in range(2, n+m+1):
+        for j in range(i+1, n+m+2):
+            rct_condition_2.add_clause([-1*(final_edge_var + i), -1*(final_edge_var + j)])
+
+    final_rct_var = final_edge_var + m*(n+m+1)
+
+    #CT vars exist for leaves too
+    ct_condition = Condition([[-1*(final_rct_var + 1)]], True, m, total_nodes)
+    
+    for i in range(1, n+m+2):
+        for j in range(2, n+m+2):
+            ct_condition.add_clause([final_edge_var + j])
+    
+    leaf_ct_condition = Condition(list(), False)
+
+    last_ct_internal_var = final_rct_var + m+n+1
+    non_zero_indices = input.nonzero()
+
+    for k in range(m):
+        true_ct_vars = non_zero_indices[0][np.where(non_zero_indices[1] == k)]
+        
+        for l in range(n):
+            if l in true_ct_vars:
+                leaf_ct_condition.add_clause([last_ct_internal_var + k*n + l + 1])
+            else:
+                leaf_ct_condition.add_clause([-1*last_ct_internal_var + k*n + l + 1])
+
+    return [rct_condition_1, rct_condition_2, ct_condition, leaf_ct_condition]
+
+def gen_reticulation_conditions():
     conditions = list()
     return conditions
 
@@ -182,8 +198,10 @@ def main(argv):
         input_matrices = parse_input(input_path)
 
         for mat in input_matrices:
-            tree_conditions = gen_tree_conditions(mat)
-            subtree_conditions = gen_subtree_conditions(mat, tree_conditions)
+            n = mat.shape[0]
+            m = mat.shape[1]
+            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
+            subtree_conditions = gen_subtree_conditions(mat, n, m, final_node_var, final_edge_var)
             conditions = tree_conditions + subtree_conditions
             sat_results = minimize_sat(conditions, Solver.GLUCOSE_SYRUP)
             ilp_results = minimize_ilp()
