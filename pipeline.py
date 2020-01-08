@@ -26,23 +26,36 @@ def parse_input(path):
 
 def gen_tree_node_conditions(n, m):
     # Each leaf must be included in the tree (I(l, k, l) = True)
-    i_condition = Condition([list(range(1, n+m+2))], True, n*m, n+m+1)
+    total_nodes = 2*n+m+1
+    root_i_condition = Condition([[1]], True, n*m, total_nodes)
 
-    final_i_val = n * m * (n+m)
+    i_condition = Condition([list(range(2, n+m+3))], True, n*m, total_nodes)
+    leaf_i_condition = Condition(list(), True, m, n*total_nodes)
+
+    leaf_i_vars = list(range(n+m+2, 2*n+m+2))
+
+    for l in range(n):
+        for i, leaf_var in enumerate(leaf_i_vars):
+            if (i == l):
+                leaf_i_condition.add_clause([leaf_var + l * total_nodes])
+            else:
+                leaf_i_condition.add_clause([-1 * (leaf_var + l * total_nodes)])
+
+    final_i_val = n * m * total_nodes
 
     # m commodities and n+m internal nodes
     # commodities can't be repeated over using the Condition (requires adding a different number to first elements than last), but each node can be
-    t_condition = Condition(list(), True, n+m, 1)
+    t_condition = Condition([[-1 * (final_i_val + 1)]], True, 2*n+m, 1)
 
     for k in range(m):
         for l in range(n):
-            t_condition.add_clause([-1 * (1 + (k*n+l)*(n+m)), final_i_val + 1 + k*(n+m)])
+            t_condition.add_clause([-1 * (2 + (k*n+l)*(total_nodes)), final_i_val + 2 + k*(2*n+m)])
     
-        t_condition.add_clause([x for x in range(k*n*(n+m)+1,((k+1)*n - 1)*(n+m)+2, n+m)] + [-1 * (final_i_val + 1 + k*(n+m))])
+        t_condition.add_clause([x for x in range(k*n*(total_nodes)+2,((k+1)*n - 1)*(total_nodes)+3, total_nodes)] + [-1 * (final_i_val + 2 + k*(2*n+m))])
     
-    node_conditions = [i_condition, t_condition]
+    node_conditions = [root_i_condition, i_condition, leaf_i_condition, t_condition]
 
-    max_val = final_i_val + m*(n+m)
+    max_val = final_i_val + m*(2*n+m)
 
     return node_conditions, max_val
 
