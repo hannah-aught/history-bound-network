@@ -29,19 +29,10 @@ def gen_tree_node_conditions(n, m):
     total_nodes = 2*n+m+1
     root_i_condition = Condition([[1]], True, n*m, total_nodes)
 
-    i_condition = Condition([list(range(2, n+m+3))], True, n*m, total_nodes)
-    leaf_i_condition = Condition(list(), True, m, n*total_nodes)
+    i_condition = Condition([list(range(2, n+m+3))], True, n*m, total_nodes - n + 1)
+    leaf_i_condition = Condition([n+m+2], True, m, n*(total_nodes - n + 1))
 
-    leaf_i_vars = list(range(n+m+2, 2*n+m+2))
-
-    for l in range(n):
-        for i, leaf_var in enumerate(leaf_i_vars):
-            if (i == l):
-                leaf_i_condition.add_clause([leaf_var + l * total_nodes])
-            else:
-                leaf_i_condition.add_clause([-1 * (leaf_var + l * total_nodes)])
-
-    final_i_val = n * m * total_nodes
+    final_i_val = n * m * (total_nodes - n + 1)
 
     # m commodities and n+m internal nodes
     # commodities can't be repeated over using the Condition (requires adding a different number to first elements than last), but each node can be
@@ -59,8 +50,28 @@ def gen_tree_node_conditions(n, m):
 
     return node_conditions, max_val
 
-def gen_tree_edge_conditions(n, m, total_nodes, num_node_vars):
-    f_condition_1 = Condition(list(), True, n*m, total_nodes - 1)
+def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
+    f_condition_1 = Condition([list(range(num_node_vars+1, num_node_vars+n+m+1))], True, m*n, total_edges)
+    f_condition_2 = Condition(list(), False)
+
+    for k in range(m):
+        for l in range(n):
+            for j in range(1, m+n+1):
+                current_node_f_vars = [num_node_vars + (k*n+l)*total_edges + j]
+                current_i_var = (n+m)*(l+k*n) + j
+                f_condition_2.add_clause([-1*current_node_f_vars[-1], current_i_var])
+
+                for i in range(j-1):
+                    current_node_f_vars.append(current_node_f_vars[-1] + m + n - max(i,1))
+                    f_condition_2.add_clause([-1*current_node_f_vars[-1], current_i_var])
+
+                f_condition_2.add_clause(current_node_f_vars + [-1*current_i_var])
+
+            f_condition_2.add_clause([x+1 for x in current_node_f_vars[1:-1]] + [current_node_f_vars[-1] + 2])
+
+        
+
+
 
     for j in range(1, m+n+1):
         for i in range(j):
@@ -107,9 +118,10 @@ def gen_tree_conditions(n, m):
     # taxa = rows
     num_internal_nodes = n + m
     total_nodes = 1 + num_internal_nodes + n # root + internal + leaves
+    total_edges = (n+m)*(1 + (n+m-1)//2 + n)
 
     node_conditions, final_node_var = gen_tree_node_conditions(n, m)
-    edge_conditions, final_edge_var = gen_tree_edge_conditions(n, m, total_nodes, final_node_var)
+    edge_conditions, final_edge_var = gen_tree_edge_conditions(n, m, total_nodes, total_edges, final_node_var)
 
     conditions = [node_conditions, edge_conditions]
     return conditions, final_node_var, final_edge_var
