@@ -67,9 +67,15 @@ def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
 
                 f_condition_2.add_clause(current_node_f_vars + [-1*current_i_var])
 
+            # Condition saying that there must be flow from at least one internal node to the leaf we're currently concerned with
+            # The condition for *only* one edge going to the leaf comes in F condition 3
             f_condition_2.add_clause([x+1 for x in current_node_f_vars[1:-1]] + [current_node_f_vars[-1] + 2])
 
-        
+    f_condition_3 = Condition(list(), True, m*n, total_edges-n+1)
+
+    for j in range(1, n+m+3):
+        for i in range(j):
+            f_condition_3.add_clause([-1*(num_node_vars + i), -1*(num_node_vars + j)])
 
 
 
