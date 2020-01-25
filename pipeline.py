@@ -57,7 +57,7 @@ def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
     for k in range(m):
         for l in range(n):
             for j in range(1, m+n+1):
-                current_node_f_vars = [num_node_vars + (k*n+l)*total_edges + j]
+                current_node_f_vars = [num_node_vars + (k*n+l)*(total_edges-(m+n)*(n-1)) + j]
                 current_i_var = (n+m)*(l+k*n) + j
                 f_condition_2.add_clause([-1*current_node_f_vars[-1], current_i_var])
 
@@ -69,27 +69,28 @@ def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
 
             # Condition saying that there must be flow from at least one internal node to the leaf we're currently concerned with
             # The condition for *only* one edge going to the leaf comes in F condition 3
-            f_condition_2.add_clause([x+1 for x in current_node_f_vars[1:-1]] + [current_node_f_vars[-1] + 2])
+            f_condition_2.add_clause([x+1 for x in current_node_f_vars[1:]] + [current_node_f_vars[-1] + 2])
 
     f_condition_3 = Condition(list(), True, m*n, total_edges-n+1)
 
-    for j in range(1, n+m+3):
-        for i in range(j):
-            f_condition_3.add_clause([-1*(num_node_vars + i), -1*(num_node_vars + j)])
+    for j in range(2, m+n+2):
+        start_f_var = num_node_vars + j
 
+        for start_i in range(j - 1):
+            next_f_var = start_f_var + m + n - max(start_i, 1)
 
+            if start_i == 0 and j == m+n+1:
+                # no edge from the root to any leaf, so continue
+                start_f_var = start_f_var + m + n - max(start_i, 1)
+                continue
 
-    for j in range(1, m+n+1):
-        for i in range(j):
-            f_condition_1.add_clause([j + 1, -1*(num_node_vars + j*(j-1)//2 + i + 1)])
-        f_condition_1.add_clause([-1*(j + 1)] + list(range(num_node_vars + j*(j-1)//2 + 1, num_node_vars + j*(j-1)//2 + i + 2)))
+            for i in range(start_i + 1, j):
+                f_condition_3.add_clause([-1*start_f_var, -1*next_f_var])
+                next_f_var = next_f_var + m + n - max(i, 1)
+
+            start_f_var = start_f_var + m + n - max(start_i, 1)
 
     last_internal_edge_var = num_node_vars + (m+n)*(m+n+1)//2
-
-    # clause for leaf 1 (at least one edge to leaf 1 must be included)
-    f_condition_1.add_clause(list(range(last_internal_edge_var + 1, last_internal_edge_var + m + n + 1)))
-
-    f_condition_2 = Condition(list(), True, n*m, total_nodes-1)
 
     num_f_vars = n*m*(last_internal_edge_var + m + n - num_node_vars)
     x_var_num = num_f_vars + 2
