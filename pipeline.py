@@ -23,54 +23,51 @@ def parse_input(path):
 
     return mats
 
-
-def gen_tree_node_conditions(n, m):
+def gen_i_conditions(n, m, total_nodes):
     # Each leaf must be included in the tree (I(l, k, l) = True)
-    total_nodes = 2*n+m+1
-    root_i_condition = Condition([[1]], True, n*m, total_nodes)
+    root_i_condition = Condition([[1]], True, n*m, total_nodes-(n-1))
 
     i_condition = Condition([list(range(2, n+m+2))], True, n*m, total_nodes - n + 1)
-    leaf_i_condition = Condition([n+m+2], True, m, n*(total_nodes - n + 1))
+    leaf_i_condition = Condition([[n+m+2]], True, n*m, total_nodes - n + 1)
 
     final_i_val = n * m * (total_nodes - n + 1)
 
+    return [root_i_condition, i_condition, leaf_i_condition], final_i_val
+
+def gen_t_conditions(n, m, total_nodes, final_i_var):
     # m commodities and n+m internal nodes
     # commodities can't be repeated over using the Condition (requires adding a different number to first elements than last), but each node can be
-    t_condition = Condition([[-1 * (final_i_val + 1)]], True, 2*n+m, 1)
+    root_t_condition = Condition([[-1*(final_i_var + 1)]], True, m, total_nodes)
+    t_condition = Condition(list(), True, m, total_nodes)
+    leaf_t_condition = Condition([[x] for x in range(final_i_var + n + m + 2, final_i_var + n + m + n + 2)], True, m, total_nodes)
 
-    for k in range(m):
+    for j in range(n + m):
         for l in range(n):
-            t_condition.add_clause([-1 * (2 + (k*n+l)*(total_nodes - n + 1)), final_i_val + 2 + k*(2*n+m)])
+            t_condition.add_clause([-1 * (2 + (l)*(total_nodes - n + 1) + j), final_i_var + 2 + j])
     
-        t_condition.add_clause([x for x in range(k*n*(total_nodes - n + 1)+2, 3 + (k*n+l)*(total_nodes - n + 1), total_nodes - n + 1)] + [-1 * (final_i_val + 2 + k*(2*n+m))])
-    
-    node_conditions = [root_i_condition, i_condition, leaf_i_condition, t_condition]
+        t_condition.add_clause([x for x in range((l-1)*(total_nodes - n + 1) + j + 2, 3 + j + (n-1)*(total_nodes - n + 1), total_nodes - n + 1)] + [-1 * (final_i_var + 2 + j)])
 
-    max_val = final_i_val + m*(2*n+m)
+    final_t_var = final_i_var + m*total_nodes
 
-    return node_conditions, max_val
+    return [root_t_condition, t_condition, leaf_t_condition], final_t_var
 
-def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
-    f_condition_1 = Condition([list(range(num_node_vars+1, num_node_vars+n+m+1))], True, m*n, total_edges)
+def gen_f_conditions(n, m, total_edges, final_t_var):
+    f_condition_1 = Condition([list(range(final_t_var+1, final_t_var+n+m+1))], True, m*n, total_edges - (m+n)*(n-1))
     f_condition_2 = Condition(list(), False)
-    f_condition_4 = Condition(list(), False)
 
-    f_vars = list(range(num_node_vars + 1, num_node_vars + total_edges - (m+n)*(n-1) + 1))
+    f_vars = list(range(final_t_var + 1, final_t_var + total_edges - (m+n)*(n-1) + 1))
 
     for k in range(m):
         for l in range(n):
             for j in range(1, m+n+1):
-                current_node_f_vars = [num_node_vars + (k*n+l)*(total_edges-(m+n)*(n-1)) + j]
+                current_node_f_vars = [final_t_var + (k*n+l)*(total_edges-(m+n)*(n-1)) + j]
                 current_i_var = (n+m + 2)*(l+k*n) + j + 1
                 start_i_var = current_i_var - j
                 f_condition_2.add_clause([-1*current_node_f_vars[-1], current_i_var])
-                f_condition_4.add_clause([-1*current_node_f_vars[-1], start_i_var])
-
 
                 for i in range(j-1):
                     current_node_f_vars.append(current_node_f_vars[-1] + m + n - max(i,1))
                     f_condition_2.add_clause([-1*current_node_f_vars[-1], current_i_var])
-                    f_condition_4.add_clause([-1*current_node_f_vars[-1], (n+m + 2)*l+k*n + i + 2])
 
                 f_condition_2.add_clause(current_node_f_vars + [-1*current_i_var])
 
@@ -78,14 +75,10 @@ def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
             # The condition for *only* one edge going to the leaf comes in F condition 3
             f_condition_2.add_clause([x+1 for x in current_node_f_vars[1:]] + [current_node_f_vars[-1] + 2])
 
-            for i, x in enumerate(current_node_f_vars[1:]):
-                f_condition_4.add_clause([-1*(x+1), (m+n*2)*(l+k*n)+i + 2])
-            f_condition_4.add_clause([-1*(current_node_f_vars[-1] + 2), (m+n*2)*(l+k*n)+i+3])
-
-    f_condition_3 = Condition(list(), True, m*n, total_edges-n+1)
+    f_condition_3 = Condition(list(), True, m*n, total_edges-(m+n)*(n-1))
 
     for j in range(2, m+n+2):
-        start_f_var = num_node_vars + j
+        start_f_var = final_t_var + j
 
         for start_i in range(j - 1):
             next_f_var = start_f_var + m + n - max(start_i, 1)
@@ -100,38 +93,66 @@ def gen_tree_edge_conditions(n, m, total_nodes, total_edges, num_node_vars):
                 next_f_var = next_f_var + m + n - max(i, 1)
 
             start_f_var = start_f_var + m + n - max(start_i, 1)
+    
+    f_condition_4 = Condition(list(), True, m*n, total_edges-(m+n)*(n-1))
+    current_f_vars = f_vars
 
-    last_f_var = num_node_vars + m*n*(f_vars[-1] - num_node_vars)
+    for i in range(m+n): # don't need to look at edges out of last internal node bc there's only one, going to leaf l
+        for start_j in range(min(m+n, m+n+1-i)):
+            first_f_var = current_f_vars[start_j]
 
-    f_condition_5 = Condition(list(), True, n, num_edges*m)
-    f_condition_6 = Condition(list(), True, m, num_edges)
+            for j in range(start_j + 1, min(m+n, m+n+1-i)):
+                second_f_var = current_f_vars[j]
+                f_condition_4.add_clause([-1*first_f_var, -1*second_f_var])
+        
+        current_f_vars = current_f_vars[min(m+n, m+n+1-i):]
 
-    for f in f_vars:
-        f_condition_5.add_clause([x * f for x in range(1, n+1)])
 
-    x_condition = Condition([[-1 * (num_node_vars + 1), num_f_vars + 1], [num_node_vars + 1, -1 * (num_f_vars + 1)]], True, total_nodes*n*m, total_nodes - 1)
+    f_condition_5 = Condition(list(), True, n*m, total_edges-(m+n)*(n-1))
+    current_f_vars = f_vars
 
-    step = 4
-    clause_index = 4
+    for i_prime in range(m+n):
+        start_f_var = f_vars[i_prime]
+        current_f_i_prime_vars = f_vars[m+n:]
+        current_f_vars = current_f_vars[min(m+n, m+n+1-i_prime):]
+        f_i_prime_vars = [f_vars[i_prime]]
 
-    while step <= m+n+2:
-        for i in range(1, len(f_condition_1.clauses[clause_index])-1):
-            for j in range(j+1, len(f_condition_1.clauses[clause_index])):
-                f_condition_2.add_clause([-1*f_condition_1.clauses[clause_index][i], -1*f_condition_1.clauses[clause_index][j]])
-            x_condition.add_clause([-1*f_condition_1.clauses[clause_index][i], x_var_num])
-        x_condition.add_clause([-1*f_condition_1.clauses[clause_index][i+1], x_var_num])
-        x_condition.add_clause(f_condition_1.clauses[clause_index][1:] + [-1 * x_var_num])
-        clause_index = clause_index + step
-        x_var_num = x_var_num + 1
-        step = step + 1
 
-    for x in f_condition_1.clauses[-1]:
-        x_condition.add_clause([-1*x, x_var_num])
-    x_condition.add_clause(f_condition_1.clauses[-1][1:] + [x_var_num])
+        for i in range(i_prime):
+            f_i_prime_vars.append(current_f_i_prime_vars[i_prime-i-1])
+            current_f_i_prime_vars = current_f_i_prime_vars[min(m+n, m+n+1-i):]
 
-    edge_conditions = [f_condition_1, f_condition_2, x_condition]
-    max_val = num_node_vars + num_f_vars + m*(x_var_num - num_f_vars)
-    return edge_conditions, x_var_num
+        for f_i in current_f_vars[:min(m+n, m+n-i_prime)]: # second arg to min is simplified from m+n+2-(i+1)               
+            f_condition_5.add_clause([-1*(f_i)] + [x for x in f_i_prime_vars])
+
+
+    last_f_var = final_t_var + m*n*(f_vars[-1] - final_t_var)
+
+    return [f_condition_1, f_condition_2, f_condition_3, f_condition_4, f_condition_5], last_f_var, f_vars
+
+def gen_x_conditions(n, m, total_edges, last_f_var, f_vars):
+    x_condition = Condition(list(), True, n, total_edges*m)
+    x_vars = list(range(last_f_var + 1, last_f_var + (total_edges - (m+n)*(n-1)) + 1))
+
+    last_x_var = last_f_var + m*(x_vars[-1] - last_f_var)
+
+    for i, f_var in enumerate(f_vars):
+        for l in range(n):
+            x_condition.add_clause([-1*(l*(total_edges-(n+m)*(n-1)) + f_var), x_vars[i]])
+        x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var for x in range(n)] + [-1*x_vars[i]])
+    
+    return x_condition, last_x_var, x_vars
+
+def gen_d_conditions(n, m, total_edges, last_x_var, x_vars):
+    d_condition = Condition(list(), True, m, total_edges)
+    d_vars = list(range(last_x_var + 1, last_x_var + total_edges + 1))
+
+    for i, x_var in enumerate(x_vars):
+        for k in range(m):
+            d_condition.add_clause([-1*(k*(total_edges-(n+m)*(n-1)) + x_var), d_vars[i]])
+        d_condition.add_clause([x_vars[i] + x*(total_edges-(m+n)*(n-1)) for x in range(m)] + [-1*d_vars[i]])
+
+    return d_condition, d_vars[-1]
 
 def gen_tree_conditions(n, m):
     # Have adjacency mat for edges?
@@ -141,11 +162,14 @@ def gen_tree_conditions(n, m):
     total_nodes = 1 + num_internal_nodes + n # root + internal + leaves
     total_edges = (n+m)*(1 + (n+m-1)//2 + n)
 
-    node_conditions, final_node_var = gen_tree_node_conditions(n, m)
-    edge_conditions, final_edge_var = gen_tree_edge_conditions(n, m, total_nodes, total_edges, final_node_var)
+    i_conditions, final_i_var = gen_i_conditions(n, m, total_nodes) # Conditions for each node being included in a commodity tree with flow passing through them to a specific leaf
+    t_conditions, final_t_var = gen_t_conditions(n, m, total_nodes, final_i_var) # Conditions for each node being included in a commodity tree
+    f_conditions, final_f_var, f_vars = gen_f_conditions(n, m, total_edges, final_t_var) # Conditions for each edge being included in a commodity tree going to a specific leaf
+    #x_conditions, final_x_var, x_vars = gen_x_conditions(n, m, total_edges, final_f_var, f_vars) # Condition for edges being included in a commodity tree
+    #d_conditions, final_d_var = gen_d_conditions(n, m, total_edges, final_x_var, x_vars) # Condition for edges being included in the DAG
 
-    conditions = [node_conditions, edge_conditions]
-    return conditions, final_node_var, final_edge_var
+    conditions = i_conditions + t_conditions + f_conditions #+ [x_conditions] + [d_conditions]
+    return conditions#, final_t_var, final_d_var
 
 def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
     conditions = list()
@@ -246,8 +270,14 @@ def main(argv):
         for mat in input_matrices:
             n = mat.shape[0]
             m = mat.shape[1]
-            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
-            subtree_conditions = gen_subtree_conditions(mat, n, m, final_node_var, final_edge_var)
+            tree_conditions= gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
+
+            with open('test', 'w+') as f:
+                for condition in tree_conditions:
+                    condition.write_condition(f)
+
+            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, final_edge_var)
+            subtree_conditions = gen_subtree_conditions(mat, n, m, final_node_var, final_r_var)
             conditions = tree_conditions + subtree_conditions
             sat_results = minimize_sat(conditions, Solver.GLUCOSE_SYRUP)
             ilp_results = minimize_ilp()
