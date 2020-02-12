@@ -131,15 +131,31 @@ def gen_f_conditions(n, m, total_edges, final_t_var):
     return [f_condition_1, f_condition_2, f_condition_3, f_condition_4, f_condition_5], last_f_var, f_vars
 
 def gen_x_conditions(n, m, total_edges, last_f_var, f_vars):
-    x_condition = Condition(list(), True, n, total_edges*m)
-    x_vars = list(range(last_f_var + 1, last_f_var + (total_edges - (m+n)*(n-1)) + 1))
+    x_condition = Condition(list(), True, m, total_edges)
+    x_vars = list(range(last_f_var + 1, last_f_var + total_edges + 1))
+    leaf_f_vars = [0 for x in range(m+n)]
+    last_index = len(f_vars) - 1
+
+    for f in range(m+n):
+        leaf_f_vars[m+n-f-1] = f_vars[-1-f*(f+1)//2]
 
     last_x_var = last_f_var + m*(x_vars[-1] - last_f_var)
+    x_i = 0
 
     for i, f_var in enumerate(f_vars):
+        if f_var in leaf_f_vars:
+            for x in range(n):
+                x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var, -1*x_vars[x_i + i +x]])
+                x_condition.add_clause([-1*(x*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i + i +x]])
+
+            x_i += x
+            continue
+
         for l in range(n):
-            x_condition.add_clause([-1*(l*(total_edges-(n+m)*(n-1)) + f_var), x_vars[i]])
-        x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var for x in range(n)] + [-1*x_vars[i]])
+            x_condition.add_clause([-1*(l*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i+i]])
+
+        x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var for x in range(n)] + [-1*x_vars[x_i+i]])
+
     
     return x_condition, last_x_var, x_vars
 
