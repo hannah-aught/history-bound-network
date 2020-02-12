@@ -182,10 +182,10 @@ def gen_tree_conditions(n, m):
     t_conditions, final_t_var = gen_t_conditions(n, m, total_nodes, final_i_var) # Conditions for each node being included in a commodity tree
     f_conditions, final_f_var, f_vars = gen_f_conditions(n, m, total_edges, final_t_var) # Conditions for each edge being included in a commodity tree going to a specific leaf
     x_conditions, final_x_var, x_vars = gen_x_conditions(n, m, total_edges, final_f_var, f_vars) # Condition for edges being included in a commodity tree
-    #d_conditions, final_d_var = gen_d_conditions(n, m, total_edges, final_x_var, x_vars) # Condition for edges being included in the DAG
+    d_conditions, final_d_var = gen_d_conditions(n, m, total_edges, final_x_var, x_vars) # Condition for edges being included in the DAG
 
-    conditions = i_conditions + t_conditions + f_conditions + [x_conditions] #+ [d_conditions]
-    return conditions#, final_t_var, final_d_var
+    conditions = i_conditions + t_conditions + f_conditions + [x_conditions] + [d_conditions]
+    return conditions, final_t_var, final_d_var
 
 def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
     conditions = list()
@@ -286,7 +286,7 @@ def main(argv):
         for mat in input_matrices:
             n = mat.shape[0]
             m = mat.shape[1]
-            tree_conditions= gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
+            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
 
             with open('test', 'w+') as f:
                 for condition in tree_conditions:
