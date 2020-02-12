@@ -165,10 +165,10 @@ def gen_tree_conditions(n, m):
     i_conditions, final_i_var = gen_i_conditions(n, m, total_nodes) # Conditions for each node being included in a commodity tree with flow passing through them to a specific leaf
     t_conditions, final_t_var = gen_t_conditions(n, m, total_nodes, final_i_var) # Conditions for each node being included in a commodity tree
     f_conditions, final_f_var, f_vars = gen_f_conditions(n, m, total_edges, final_t_var) # Conditions for each edge being included in a commodity tree going to a specific leaf
-    #x_conditions, final_x_var, x_vars = gen_x_conditions(n, m, total_edges, final_f_var, f_vars) # Condition for edges being included in a commodity tree
+    x_conditions, final_x_var, x_vars = gen_x_conditions(n, m, total_edges, final_f_var, f_vars) # Condition for edges being included in a commodity tree
     #d_conditions, final_d_var = gen_d_conditions(n, m, total_edges, final_x_var, x_vars) # Condition for edges being included in the DAG
 
-    conditions = i_conditions + t_conditions + f_conditions #+ [x_conditions] + [d_conditions]
+    conditions = i_conditions + t_conditions + f_conditions + [x_conditions] #+ [d_conditions]
     return conditions#, final_t_var, final_d_var
 
 def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
