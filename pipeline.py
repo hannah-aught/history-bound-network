@@ -5,7 +5,7 @@ import numpy as np
 import time
 from enum import Enum
 from Condition import Condition
-from sympy.logic.boolalg import to_cnf, Equivalent
+from sympy.logic.boolalg import to_cnf, Equivalent, Implies
 from sympy import symbols
 
 class Solver(Enum):
@@ -238,11 +238,11 @@ def sympy_to_dimacs(expr):
     return clauses
 
 def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
-    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 1)])
+    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 2)])
     d_vars = symbols([str(x) for x in range(final_d_var - num_edges + 1, final_d_var + 1)])
     final_r_var = final_d_var + 2*n + m
 
-    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 1))])
+    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 2) + 1)])
     r_condition = Condition(list(), False)
     c_condition = Condition(list(), False)
 
@@ -251,7 +251,7 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
     j_node = 2
     offset = 1
 
-    for r in r_vars[1:]:
+    for r in r_vars[1:-1]:
         clauses = list()
         vars = list()
 
@@ -283,8 +283,20 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
         for clause in clauses:
             r_condition.add_clause(clause)
 
+    
+    for k in range(goal_count + 1):
+        for i in range(len(r_vars)-1):
+            current_c_var_index = k*(m+2*n+1) + i
+            sympy_clauses = to_cnf(Implies(c_vars[current_c_var_index], c_vars[current_c_var_index + 1]))
+            sympy_clauses = sympy_clauses & to_cnf(Implies(c_vars[current_c_var_index] & r_vars[i], c_vars[(k+1)*(m+2*n+1) + i + 1]))
+            clauses = sympy_to_dimacs(str(sympy_clauses))
 
-    conditions = r_condition + c_condition
+            for clause in clauses:
+                c_condition.add_clause(clause)
+
+
+    conditions = [r_condition, c_condition]
+    final_c_var = final_d_var + len(r_vars) + len(c_vars)
 
     return conditions, final_c_var
 
