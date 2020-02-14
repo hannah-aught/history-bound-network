@@ -5,6 +5,8 @@ import numpy as np
 import time
 from enum import Enum
 from Condition import Condition
+from sympy.logic.boolalg import to_cnf
+from sympy import symbols
 
 class Solver(Enum):
     PLINGELING = 0
@@ -226,9 +228,45 @@ def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
 
     return [rct_condition_1, rct_condition_2, ct_condition, leaf_ct_condition]
 
-def gen_reticulation_conditions():
-    conditions = list()
-    return conditions
+def sympy_to_dimacs(expr):
+    clauses = expr.split('&')
+
+    for i, clause in enumerate(clauses):
+        clauses = clause.strip().replace(" | ", " ").replace("(", "").replace(")", "").replace("~", "-")
+        clauses[i] = [int(x) for x in clause.split(" ")]
+
+    return clauses
+
+def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
+    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 1)])
+    d_vars = symbols([str(x) for x in range(final_d_var - num_edges, final_d_var + 1)])
+    final_r_var = final_d_var + 2*n + m
+
+    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 1)])
+    r_condition = Condition(list(), False)
+    c_condition = Condition(list(), False)
+
+    r_condition.add_clause(-1*(final_d_var + 1))
+
+    j_node = 2
+
+    for r in r_vars[1:]:
+        offset = j_node
+
+        for i in range(j_node):
+            if i == 0 and j_node > n + m:
+                offset += n+m-1
+                continue # no edge from 0 to leaves
+            
+
+
+        sympy_clauses = to_cnf()
+        clauses = sympy_to_dimacs(to_cnf)
+        j_node += 1
+
+    conditions = r_condition + c_condition
+
+    return conditions, final_c_var
 
 def minimize_sat(conditions, solver):
     bound = 0
