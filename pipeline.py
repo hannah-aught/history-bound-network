@@ -192,8 +192,8 @@ def gen_tree_conditions(n, m):
 def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
     conditions = list()
     total_nodes = 2 * n + m + 1
-    i_offset = n*m*(n+m)
-    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 2)]], True, m*(n+m), 1)
+    i_offset = n*m*(n+m+2)
+    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, m*(n+m), 1)
     rct_condition_2 = Condition(list(), True, m, n+m+1)
 
     # Root can't be the root of the subtree
@@ -296,7 +296,7 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
 
 
     conditions = [r_condition, c_condition]
-    final_c_var = final_d_var + len(r_vars) + len(c_vars)
+    final_c_var = final_d_var + len(r_vars) + len(c_vars) - 1
 
     return conditions, final_c_var
 
