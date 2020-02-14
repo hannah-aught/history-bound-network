@@ -5,7 +5,7 @@ import numpy as np
 import time
 from enum import Enum
 from Condition import Condition
-from sympy.logic.boolalg import to_cnf
+from sympy.logic.boolalg import to_cnf, Equivalent
 from sympy import symbols
 
 class Solver(Enum):
@@ -232,37 +232,57 @@ def sympy_to_dimacs(expr):
     clauses = expr.split('&')
 
     for i, clause in enumerate(clauses):
-        clauses = clause.strip().replace(" | ", " ").replace("(", "").replace(")", "").replace("~", "-")
+        clause = clause.strip().replace(" | ", " ").replace("(", "").replace(")", "").replace("~", "-")
         clauses[i] = [int(x) for x in clause.split(" ")]
 
     return clauses
 
 def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
     r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 1)])
-    d_vars = symbols([str(x) for x in range(final_d_var - num_edges, final_d_var + 1)])
+    d_vars = symbols([str(x) for x in range(final_d_var - num_edges + 1, final_d_var + 1)])
     final_r_var = final_d_var + 2*n + m
 
-    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 1)])
+    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 1))])
     r_condition = Condition(list(), False)
     c_condition = Condition(list(), False)
 
-    r_condition.add_clause(-1*(final_d_var + 1))
+    r_condition.add_clause([-1*(final_d_var + 1)])
 
     j_node = 2
+    offset = 1
 
     for r in r_vars[1:]:
-        offset = j_node
+        clauses = list()
+        vars = list()
 
-        for i in range(j_node):
+        for i in range(min(j_node, m+n+1)):
             if i == 0 and j_node > n + m:
                 offset += n+m-1
                 continue # no edge from 0 to leaves
-            
 
+            vars.append(d_vars[offset])
 
-        sympy_clauses = to_cnf()
-        clauses = sympy_to_dimacs(to_cnf)
+            if i == 0:
+                offset += m+n-1
+            else:
+                offset +=  m+n-(i-1)
+        
+        dnf_clause = False
+
+        for x, var in enumerate(vars[:-1]):
+            for y in range(x + 1, len(vars)):
+                dnf_clause = dnf_clause | (var & vars[y])
+        
+
+        sympy_clauses = to_cnf(Equivalent(r, dnf_clause))
+        clauses = sympy_to_dimacs(str(sympy_clauses))
         j_node += 1
+        offset = j_node-1
+
+
+        for clause in clauses:
+            r_condition.add_clause(clause)
+
 
     conditions = r_condition + c_condition
 
@@ -324,13 +344,16 @@ def main(argv):
         for mat in input_matrices:
             n = mat.shape[0]
             m = mat.shape[1]
+            num_edges = (n+m)*(1 + (n+m-1)//2 + n)
+            c = 1
+
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
 
             with open('test', 'w+') as f:
                 for condition in tree_conditions:
                     condition.write_condition(f)
 
-            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, final_edge_var)
+            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_edge_var)
             subtree_conditions = gen_subtree_conditions(mat, n, m, final_node_var, final_r_var)
             conditions = tree_conditions + subtree_conditions
             sat_results = minimize_sat(conditions, Solver.GLUCOSE_SYRUP)
