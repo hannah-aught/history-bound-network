@@ -240,7 +240,7 @@ def sympy_to_dimacs(expr):
 def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
     r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 2)])
     d_vars = symbols([str(x) for x in range(final_d_var - num_edges + 1, final_d_var + 1)])
-    final_r_var = final_d_var + 2*n + m
+    final_r_var = final_d_var + 2*n + m + 1
 
     c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 2) + 1)])
     r_condition = Condition(list(), False)
@@ -296,7 +296,7 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
 
 
     conditions = [r_condition, c_condition]
-    final_c_var = final_d_var + len(r_vars) + len(c_vars) - 1
+    final_c_var = final_d_var + len(r_vars) + len(c_vars)
 
     return conditions, final_c_var
 
