@@ -189,28 +189,54 @@ def gen_tree_conditions(n, m):
     conditions = i_conditions + t_conditions + f_conditions + [x_conditions] + [d_conditions]
     return conditions, final_t_var, final_d_var
 
-def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
+def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_var, final_r_var):
     conditions = list()
     total_nodes = 2 * n + m + 1
     i_offset = n*m*(n+m+2)
-    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, m*(n+m), 1)
-    rct_condition_2 = Condition(list(), True, m, n+m+1)
+    final_rct_var = final_r_var + m*total_nodes
+    final_ct_var = final_rct_var + m*total_nodes
+    rct_vars = symbols([str(r) for r in range(final_r_var + 1, final_rct_var + 1)])
+    ct_vars = symbols([str(c) for c in range(final_rct_var + 1, final_ct_var + 1)])
+    x_vars = symbols([str(x) for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)])
+    rct_condition_1 = Condition([[i_offset + 1, -1*(final_r_var + 1)]], True, m*total_nodes, 1)
+    rct_condition_2 = Condition([[x for x in range(final_r_var + 2, final_r_var + m+2*n+2)]], True, m, total_nodes)
+    rct_condition_3 = Condition(list(), True, m, n+m+1)
 
     # Root can't be the root of the subtree
-    rct_condition_2.add_clause([-1*(final_edge_var + 1)])
+    rct_condition_3.add_clause([-1*(final_r_var + 1)])
 
-    for i in range(2, n+m+1):
-        for j in range(i+1, n+m+2):
-            rct_condition_2.add_clause([-1*(final_edge_var + i), -1*(final_edge_var + j)])
+    for i in range(2, total_nodes):
+        for j in range(i+1, total_nodes + 1):
+            rct_condition_3.add_clause([-1*(final_r_var + i), -1*(final_r_var + j)])
 
-    final_rct_var = final_edge_var + m*(n+m+1)
 
     #CT vars exist for leaves too
     ct_condition = Condition([[-1*(final_rct_var + 1)]], True, m, total_nodes)
-    
-    for i in range(1, n+m+2):
-        for j in range(2, n+m+2):
-            ct_condition.add_clause([final_edge_var + j])
+
+    offset = 0
+    clauses = list()
+
+    for j in range(1,total_nodes):
+        dnf_clause = rct_vars[j]
+        offset = j-1
+
+        for i in range(min(j, m+n+1)):
+            if i == 0 and j > n + m:
+                offset += n+m-1
+                continue
+            
+            dnf_clause = dnf_clause | (ct_vars[i] & x_vars[offset])
+
+            if i == 0:
+                offset += m+n-1
+            else:
+                offset += m+n-(i-1)
+        
+        sympy_clauses = to_cnf(Equivalent(ct_vars[j], dnf_clause))
+        clauses = sympy_to_dimacs(str(sympy_clauses))
+
+        for clause in clauses:
+            ct_condition.add_clause(clause)
     
     leaf_ct_condition = Condition(list(), False)
 
@@ -224,7 +250,7 @@ def gen_subtree_conditions(input, n, m, final_node_var, final_edge_var):
             if l in true_ct_vars:
                 leaf_ct_condition.add_clause([last_ct_internal_var + k*n + l + 1])
             else:
-                leaf_ct_condition.add_clause([-1*last_ct_internal_var + k*n + l + 1])
+                leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*n + l + 1)])
 
     return [rct_condition_1, rct_condition_2, ct_condition, leaf_ct_condition]
 
@@ -295,8 +321,10 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
                 c_condition.add_clause(clause)
 
 
-    conditions = [r_condition, c_condition]
     final_c_var = final_d_var + len(r_vars) + len(c_vars)
+    c_condition.add_clause([-1*final_c_var])
+    conditions = [r_condition, c_condition]
+
 
     return conditions, final_c_var
 
@@ -357,17 +385,17 @@ def main(argv):
             n = mat.shape[0]
             m = mat.shape[1]
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
-            c = 1
+            c = 0
 
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
+            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_edge_var)
+            subtree_conditions = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var, final_r_var)
+            conditions = tree_conditions + reticulation_conditions + subtree_conditions
 
             with open('test', 'w+') as f:
-                for condition in tree_conditions:
+                for condition in conditions:
                     condition.write_condition(f)
 
-            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_edge_var)
-            subtree_conditions = gen_subtree_conditions(mat, n, m, final_node_var, final_r_var)
-            conditions = tree_conditions + subtree_conditions
             sat_results = minimize_sat(conditions, Solver.GLUCOSE_SYRUP)
             ilp_results = minimize_ilp()
 
