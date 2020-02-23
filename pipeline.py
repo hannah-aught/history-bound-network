@@ -40,14 +40,15 @@ def gen_t_conditions(n, m, total_nodes, final_i_var):
     # m commodities and n+m internal nodes
     # commodities can't be repeated over using the Condition (requires adding a different number to first elements than last), but each node can be
     root_t_condition = Condition([[-1*(final_i_var + 1)]], True, m, total_nodes)
-    t_condition = Condition(list(), True, m, total_nodes)
+    t_condition = Condition(list(), False)
     leaf_t_condition = Condition([[x] for x in range(final_i_var + n + m + 2, final_i_var + n + m + n + 2)], True, m, total_nodes)
 
-    for j in range(n + m):
-        for l in range(n):
-            t_condition.add_clause([-1 * (2 + (l)*(total_nodes - n + 1) + j), final_i_var + 2 + j])
-    
-        t_condition.add_clause([x for x in range((l-1)*(total_nodes - n + 1) + j + 2, 3 + j + (n-1)*(total_nodes - n + 1), total_nodes - n + 1)] + [-1 * (final_i_var + 2 + j)])
+    for k in range(m):
+        for j in range(n + m):
+            for l in range(n):
+                t_condition.add_clause([-1 * (2 + (n*k+l)*(total_nodes - n + 1) + j), final_i_var + 2 + k*total_nodes + j])
+        
+            t_condition.add_clause([x for x in range((n*k+l-1)*(total_nodes - n + 1) + j + 2, 3 + j + (n*k+n-1)*(total_nodes - n + 1), total_nodes - n + 1)] + [-1 * (final_i_var + 2 + k*total_nodes + j)])
 
     final_t_var = final_i_var + m*total_nodes
 
@@ -394,7 +395,7 @@ def main(argv):
             n = mat.shape[0]
             m = mat.shape[1]
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
-            c = 1
+            c = m+n-4
 
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_edge_var)
@@ -412,4 +413,4 @@ def main(argv):
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test2"])
