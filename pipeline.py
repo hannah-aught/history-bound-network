@@ -199,7 +199,11 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     ct_vars = symbols([str(c) for c in range(final_rct_var + 1, final_ct_var + 1)])
     x_vars = symbols([str(x) for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)])
     rct_condition_1 = Condition([[i_offset + 1, -1*(final_r_var + 1)]], True, m*total_nodes, 1)
-    rct_condition_2 = Condition([[x for x in range(final_r_var + 2, final_r_var + m+2*n+2)]], True, m, total_nodes)
+    rct_condition_2 = Condition([[x for x in range(final_r_var + 2, final_r_var + m+n+2)]], True, m, total_nodes)
+    
+    for x in range(m+n+1, m+2*n+1):
+        rct_condition_2.add_clause([-1*(x+final_r_var)])
+
     rct_condition_3 = Condition(list(), True, m, n+m+1)
 
     # Root can't be the root of the subtree
@@ -252,7 +256,7 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
             else:
                 leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*n + l + 1)])
 
-    return [rct_condition_1, rct_condition_2, ct_condition, leaf_ct_condition]
+    return [rct_condition_1, rct_condition_2, rct_condition_3, ct_condition, leaf_ct_condition]
 
 def sympy_to_dimacs(expr):
     clauses = expr.split('&')
@@ -264,11 +268,11 @@ def sympy_to_dimacs(expr):
     return clauses
 
 def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
-    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + 2*n + m + 2)])
+    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + n + m + 1)])
     d_vars = symbols([str(x) for x in range(final_d_var - num_edges + 1, final_d_var + 1)])
-    final_r_var = final_d_var + 2*n + m + 1
+    final_r_var = final_d_var + n + m
 
-    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (2*n + m + 1)*(goal_count + 2) + 1)])
+    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (n + m + 1)*(goal_count + 1) + 1)])
     r_condition = Condition(list(), False)
     c_condition = Condition(list(), False)
 
@@ -277,7 +281,7 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
     j_node = 2
     offset = 1
 
-    for r in r_vars[1:-1]:
+    for r in r_vars[1:]:
         clauses = list()
         vars = list()
 
@@ -309,12 +313,17 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
         for clause in clauses:
             r_condition.add_clause(clause)
 
-    
     for k in range(goal_count + 1):
-        for i in range(len(r_vars)-1):
-            current_c_var_index = k*(m+2*n+1) + i
-            sympy_clauses = to_cnf(Implies(c_vars[current_c_var_index], c_vars[current_c_var_index + 1]))
-            sympy_clauses = sympy_clauses & to_cnf(Implies(c_vars[current_c_var_index] & r_vars[i], c_vars[(k+1)*(m+2*n+1) + i + 1]))
+        for i in range(len(r_vars)):
+            current_c_var_index = k*(m+n+1) + i
+            sympy_clauses = Implies(c_vars[current_c_var_index], c_vars[current_c_var_index + 1]) 
+
+            if k < goal_count:
+                sympy_clauses = sympy_clauses & Implies(c_vars[current_c_var_index] & r_vars[i], c_vars[(k+1)*(m+n+1) + i + 1])
+            if k == 0:
+                sympy_clauses = sympy_clauses & Implies(r_vars[i], c_vars[current_c_var_index + 1])
+
+            sympy_clauses = to_cnf(sympy_clauses)
             clauses = sympy_to_dimacs(str(sympy_clauses))
 
             for clause in clauses:
@@ -385,9 +394,9 @@ def main(argv):
             n = mat.shape[0]
             m = mat.shape[1]
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
-            c = 0
+            c = 1
 
-            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m) #, final_node_var, final_edge_var 
+            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_edge_var)
             subtree_conditions = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var, final_r_var)
             conditions = tree_conditions + reticulation_conditions + subtree_conditions
