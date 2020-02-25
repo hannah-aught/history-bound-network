@@ -134,7 +134,7 @@ def gen_f_conditions(n, m, total_edges, final_t_var):
     return [f_condition_1, f_condition_2, f_condition_3, f_condition_4, f_condition_5], last_f_var, f_vars
 
 def gen_x_conditions(n, m, total_edges, last_f_var, f_vars):
-    x_condition = Condition(list(), True, m, total_edges)
+    x_condition = Condition(list(), False)
     x_vars = list(range(last_f_var + 1, last_f_var + total_edges + 1))
     leaf_f_vars = [0 for x in range(m+n)]
     last_index = len(f_vars) - 1
@@ -143,33 +143,35 @@ def gen_x_conditions(n, m, total_edges, last_f_var, f_vars):
         leaf_f_vars[m+n-f-1] = f_vars[-1-f*(f+1)//2]
 
     last_x_var = last_f_var + m*(x_vars[-1] - last_f_var)
-    x_i = 0
 
-    for i, f_var in enumerate(f_vars):
-        if f_var in leaf_f_vars:
-            for x in range(n):
-                x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var, -1*x_vars[x_i + i +x]])
-                x_condition.add_clause([-1*(x*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i + i +x]])
+    for k in range(m):
+        x_i = 0
 
-            x_i += x
-            continue
+        for i, f_var in enumerate(f_vars):
+            if f_var in leaf_f_vars:
+                for x in range(n):
+                    x_condition.add_clause([(n*k+x)*(total_edges-(n+m)*(n-1)) + f_var, -1*(x_vars[x_i + i +x] + k*total_edges)])
+                    x_condition.add_clause([-1*((n*k+x)*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i + i +x] + k*total_edges])
 
-        for l in range(n):
-            x_condition.add_clause([-1*(l*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i+i]])
+                x_i += x
+                continue
 
-        x_condition.add_clause([x*(total_edges-(n+m)*(n-1)) + f_var for x in range(n)] + [-1*x_vars[x_i+i]])
+            for l in range(n):
+                x_condition.add_clause([-1*((n*k+l)*(total_edges-(n+m)*(n-1)) + f_var), x_vars[x_i+i]+k*total_edges])
+
+            x_condition.add_clause([(n*k+x)*(total_edges-(n+m)*(n-1)) + f_var for x in range(n)] + [-1*(x_vars[x_i+i] + k*total_edges)])
 
     
     return x_condition, last_x_var, x_vars
 
 def gen_d_conditions(n, m, total_edges, last_x_var, x_vars):
-    d_condition = Condition(list(), True, m, total_edges)
+    d_condition = Condition(list(), False)
     d_vars = list(range(last_x_var + 1, last_x_var + total_edges + 1))
 
     for i, x_var in enumerate(x_vars):
         for k in range(m):
-            d_condition.add_clause([-1*(k*(total_edges-(n+m)*(n-1)) + x_var), d_vars[i]])
-        d_condition.add_clause([x_vars[i] + x*(total_edges-(m+n)*(n-1)) for x in range(m)] + [-1*d_vars[i]])
+            d_condition.add_clause([-1*(k*total_edges + x_var), d_vars[i]])
+        d_condition.add_clause([x_vars[i] + x*total_edges for x in range(m)] + [-1*d_vars[i]])
 
     return d_condition, d_vars[-1]
 
@@ -202,10 +204,10 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     rct_condition_1 = Condition([[i_offset + 1, -1*(final_r_var + 1)]], True, m*total_nodes, 1)
     rct_condition_2 = Condition([[x for x in range(final_r_var + 2, final_r_var + m+n+2)]], True, m, total_nodes)
     
-    for x in range(m+n+1, m+2*n+1):
+    for x in range(m+n+2, m+2*n+2):
         rct_condition_2.add_clause([-1*(x+final_r_var)])
 
-    rct_condition_3 = Condition(list(), True, m, n+m+1)
+    rct_condition_3 = Condition(list(), True, m, total_nodes)
 
     # Root can't be the root of the subtree
     rct_condition_3.add_clause([-1*(final_r_var + 1)])
@@ -216,32 +218,34 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
 
 
     #CT vars exist for leaves too
-    ct_condition = Condition([[-1*(final_rct_var + 1)]], True, m, total_nodes)
+    ct_condition = Condition(list(), False)
 
     offset = 0
     clauses = list()
 
-    for j in range(1,total_nodes):
-        dnf_clause = rct_vars[j]
-        offset = j-1
+    for k in range(m):
+        ct_condition.add_clause([-1*(final_rct_var + k*total_nodes + 1)])
+        for j in range(1,total_nodes):
+            dnf_clause = rct_vars[j + k*total_nodes]
+            offset = k*num_edges + j-1
 
-        for i in range(min(j, m+n+1)):
-            if i == 0 and j > n + m:
-                offset += n+m-1
-                continue
+            for i in range(min(j, m+n+1)):
+                if i == 0 and j > n + m:
+                    offset += n+m-1
+                    continue
+                
+                dnf_clause = dnf_clause | (ct_vars[i + k*total_nodes] & x_vars[offset])
+
+                if i == 0:
+                    offset += m+n-1
+                else:
+                    offset += m+n-(i-1)
             
-            dnf_clause = dnf_clause | (ct_vars[i] & x_vars[offset])
+            sympy_clauses = to_cnf(Equivalent(ct_vars[j + k*total_nodes], dnf_clause))
+            clauses = sympy_to_dimacs(str(sympy_clauses))
 
-            if i == 0:
-                offset += m+n-1
-            else:
-                offset += m+n-(i-1)
-        
-        sympy_clauses = to_cnf(Equivalent(ct_vars[j], dnf_clause))
-        clauses = sympy_to_dimacs(str(sympy_clauses))
-
-        for clause in clauses:
-            ct_condition.add_clause(clause)
+            for clause in clauses:
+                ct_condition.add_clause(clause)
     
     leaf_ct_condition = Condition(list(), False)
 
@@ -253,9 +257,9 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
         
         for l in range(n):
             if l in true_ct_vars:
-                leaf_ct_condition.add_clause([last_ct_internal_var + k*n + l + 1])
+                leaf_ct_condition.add_clause([last_ct_internal_var + k*total_nodes + l + 1])
             else:
-                leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*n + l + 1)])
+                leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*total_nodes + l + 1)])
 
     return [rct_condition_1, rct_condition_2, rct_condition_3, ct_condition, leaf_ct_condition]
 
