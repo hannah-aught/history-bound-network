@@ -211,9 +211,9 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     i_offset = n*m*(n+m+2)
     final_rct_var = final_edge_var + m*total_nodes
     final_ct_var = final_rct_var + m*total_nodes
-    rct_vars = symbols([str(r) for r in range(final_edge_var + 1, final_rct_var + 1)])
-    ct_vars = symbols([str(c) for c in range(final_rct_var + 1, final_ct_var + 1)])
-    x_vars = symbols([str(x) for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)])
+    rct_vars = [r for r in range(final_edge_var + 1, final_rct_var + 1)]
+    ct_vars = [c for c in range(final_rct_var + 1, final_ct_var + 1)]
+    x_vars = [x for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)]
     rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, m*total_nodes, 1)
     rct_condition_2 = Condition([[x for x in range(final_edge_var + 2, final_edge_var + m+n+2)]], True, m, total_nodes)
     
@@ -239,17 +239,15 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     for k in range(m):
         ct_condition.add_clause([-1*(final_rct_var + k*total_nodes + 1)])
         for j in range(1,total_nodes):
-            dnf_clause = rct_vars[j + k*total_nodes]
-            dnf_vars = [[dnf_clause]]
+            dnf_clauses = [[rct_vars[j+k*total_nodes]]]
             offset = k*num_edges + j-1
-
+            
             for i in range(min(j, m+n+1)):
                 if i == 0 and j > n + m:
                     offset += n+m-1
                     continue
                 
-                dnf_clause = dnf_clause | (ct_vars[i + k*total_nodes] & x_vars[offset])
-                dnf_vars.append([ct_vars[i + k*total_nodes], x_vars[offset]])
+                dnf_clauses.append([ct_vars[i + k*total_nodes], x_vars[offset]])
 
                 if i == 0:
                     offset += m+n-1
@@ -257,11 +255,13 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
                     offset += m+n-(i-1)
             
             ct_var = ct_vars[j+k*total_nodes]
-            sequence = [0 for x in range(len(dnf_vars))]
-            permutations = list()
-            get_permutations(0, dnf_vars, ct_var, sequence, permutations)
-            sympy_clauses = to_cnf(Equivalent(ct_var, dnf_clause))
-            clauses = sympy_to_dimacs(str(sympy_clauses))
+            clauses = list()
+
+            for clause in dnf_clauses:
+                clauses.append([-x for x in clause] + [ct_var])
+
+            sequence = [0 for x in range(len(dnf_clauses))]
+            get_permutations(0, dnf_clauses, ct_var, sequence, clauses)
 
             for clause in clauses:
                 ct_condition.add_clause(clause)
@@ -280,7 +280,7 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
             else:
                 leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*total_nodes + l + 1)])
 
-    return [rct_condition_1, rct_condition_2, rct_condition_3, ct_condition, leaf_ct_condition]
+    return [rct_condition_1, rct_condition_2, rct_condition_3, ct_condition, leaf_ct_condition], abs(leaf_ct_condition.clauses[-1][0])
 
 def sympy_to_dimacs(expr):
     clauses = expr.split('&')
@@ -291,9 +291,9 @@ def sympy_to_dimacs(expr):
 
     return clauses
 
-def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
-    r_vars = symbols([str(x) for x in range(final_d_var +  1, final_d_var + n + m + 1)])
-    d_vars = symbols([str(x) for x in range(final_d_var - num_edges + 1, final_d_var + 1)])
+def gen_reticulation_conditions(n, m, num_edges, final_d_var):
+    r_vars = [x for x in range(final_d_var +  1, final_d_var + n + m + 1)]
+    d_vars = [x for x in range(final_d_var - num_edges + 1, final_d_var + 1)]
     final_r_var = final_d_var + n + m
 
     r_condition = Condition(list(), False)
@@ -320,24 +320,23 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
             else:
                 offset +=  m+n-(i-1)
         
-        r_implies_dnf = True
-        clause = False
-        dnf_implies_r = True
+        r_implies_dnf = list()
+        clause = list()
+        dnf_implies_r = list()
 
         for x in range(len(vars)):
-            clause = False
+            clause = list()
             for y in range(len(vars)):
                 if y == x:
                     continue
-                clause = clause | vars[y]
-            r_implies_dnf = r_implies_dnf & (clause | ~r)
+                clause.append(vars[y])
+            r_implies_dnf.append(clause +  [-r])
 
         for x, var in enumerate(vars[:-1]):
             for y in range(x + 1, len(vars)):
-                dnf_implies_r = dnf_implies_r & (~var | ~vars[y] | r)
+                dnf_implies_r.append([-var, -vars[y], r])
         
-        sympy_clauses = r_implies_dnf & dnf_implies_r
-        clauses = sympy_to_dimacs(str(sympy_clauses))
+        clauses = r_implies_dnf + dnf_implies_r
         j_node += 1
         offset = j_node-1
 
@@ -345,9 +344,7 @@ def gen_reticulation_conditions(n, m, goal_count, num_edges, final_d_var):
         for clause in clauses:
             r_condition.add_clause(clause)
 
-    print("generated reticulation conditions")
-
-    return r_condition, final_r_var
+    return [r_condition], final_r_var
 
 
 def gen_counting_conditions(n, m, goal_count, final_r_var):
@@ -375,32 +372,83 @@ def gen_counting_conditions(n, m, goal_count, final_r_var):
     final_c_var = int(str(c_vars[-1]))
     c_condition.add_clause([-1*final_c_var])
 
-    return c_condition, final_c_var
+    return [c_condition], final_c_var
 
 
-def minimize_sat(file, m, n, solver):
-    bound = 0
+def write_cnf_file(conditions, num_vars, num_clauses, cnf_file_path):
+    with open(cnf_file_path, "w+") as f:
+        print("p cnf", num_vars, num_clauses, file=f)
+
+        for condition in conditions:
+            condition.write_condition(f)
+
+def append_to_cnf_file(conditions, num_vars, num_clauses, cnf_file_path):
+    result = subprocess.run(["cp", "temp", cnf_file_path], capture_output=True)
+
+    with open(cnf_file_path, "a") as f:
+        for condition in conditions:
+            condition.write_condition(f)
+
+    with open(cnf_file_path, "r+") as f:
+        f.seek(0)
+        f.write("p cnf " + str(num_vars) + " " + str(num_clauses))
+
+def get_num_clauses(conditions):
+    num_clauses = 0
+
+    for condition in conditions:
+        num_clauses += len(condition.clauses) * condition.num_repeats
+
+    return num_clauses
+
+def call_solver(solver_path, cnf_file_path):
+
+    start_time = time.time()
+    result = subprocess.run([solver_path, cnf_file_path], capture_output=True)
+    end_time = time.time()
+
+    total_time = end_time - start_time
+    sat = " SATISFIABLE" in str(result.stdout)
+
+    return total_time, sat
+
+def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_path):
+    bound = num_rows + num_cols
     total_time = 0
+    runs_required = 0
+    sat = True
+
+    num_clauses = get_num_clauses(conditions)
+    write_cnf_file(conditions, var_offset, num_clauses, "temp")
 
     if (solver == Solver.GLUCOSE_SYRUP):
         solver_path = "./glucose-syrup/parallel/glucose-syrup"
     else:
         solver_path = "./lingeling/plingeling"
 
-    start_time = time.time()
+    while sat and bound >= 0:
+        counting_conditions, final_c_var = gen_counting_conditions(num_rows, num_cols, bound, var_offset)
+        num_counting_clauses = get_num_clauses(counting_conditions)
+        append_to_cnf_file(counting_conditions, final_c_var, num_clauses + num_counting_clauses, cnf_file_path)
+        time, sat = call_solver(solver_path, cnf_file_path)
+        runs_required += 1
+        total_time += time
 
-    result = subprocess.run([solver_path, file], capture_output=True)
+        if sat:
+            bound -= 1
+        else:
+            bound += 1
 
-    end_time = time.time()
-
-    total_time = end_time - start_time
-
-    if not result.stdout.contains(r"\s+SATISFIABLE"):
-        bound = bound + 1
-
+    if bound == -1:
+        bound = 0
 
     results = {"time":total_time, "bound":bound, "runs_required":runs_required}
     return results
+
+def print_results(results):
+    print("time taken:", results['time'])
+    print("bound:", results['bound'])
+    print("runs required:", results['runs_required'])
 
 def main(argv):
     outdir = "./output"
@@ -429,30 +477,18 @@ def main(argv):
             m = mat.shape[1]
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
 
-            for c in range(m+n, -1, -1):
+            tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
+            print("generated tree conditions")
+            subtree_conditions, final_ct_var = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var)
+            print("generated subtree conditions")
+            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_ct_var)
+            print("generated reticulation node conditions")
+            conditions = tree_conditions + subtree_conditions + reticulation_conditions
 
-                tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
-                print("generated tree conditions")
-                subtree_conditions, final_ct_var = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var)
-                print("generated subtree conditions")
-                reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, c, num_edges, final_ct_var)
-                print("generated reticulation node conditions and counting conditions")
-                counting_conditions, final_c_var = gen_counting_conditions(c, final_r_var)
-                conditions = tree_conditions + reticulation_conditions + subtree_conditions
-                total_conditions = 0
+            sat_results = minimize_sat(conditions, final_r_var, m, n, Solver.GLUCOSE_SYRUP, "test.cnf")
 
-                for condition in conditions:
-                    total_conditions += len(condition.clauses)*condition.num_repeats
-
-                with open('test', 'w+') as f:
-                    print("p cnf", abs(subtree_conditions[-1].clauses[-1][0]), total_conditions, file=f)
-                    for condition in conditions:
-                        condition.write_condition(f)
-
-                sat_results = minimize_sat("test", Solver.GLUCOSE_SYRUP)
-
-        print_results(sat_results, ilp_results)
+        print_results(sat_results)
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test3"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test4"])
