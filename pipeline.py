@@ -101,24 +101,23 @@ def gen_f_conditions(n, m, total_edges, final_t_var):
     current_f_vars = f_vars
 
     for i in range(m+n): # don't need to look at edges out of last internal node bc there's only one, going to leaf l
-        for start_j in range(min(m+n, m+n-i)):
+        for start_j in range(min(m+n, m+n-i+1)):
             first_f_var = current_f_vars[start_j]
 
-            for j in range(start_j + 1, min(m+n, m+n-i)):
+            for j in range(start_j + 1, min(m+n, m+n-i+1)):
                 second_f_var = current_f_vars[j]
                 f_condition_4.add_clause([-1*first_f_var, -1*second_f_var])
         
-        current_f_vars = current_f_vars[min(m+n, m+n-i):]
+        current_f_vars = current_f_vars[min(m+n, m+n-i+1):]
 
 
     f_condition_5 = Condition(list(), True, n*m, total_edges-(m+n)*(n-1))
-    current_f_vars = f_vars
+    current_f_vars = f_vars[m+n:]
 
 
     for i_prime in range(m+n):
         start_f_var = f_vars[i_prime]
         current_f_i_prime_vars = f_vars[m+n:]
-        current_f_vars = current_f_vars[min(m+n, m+n-i_prime):]
         f_i_prime_vars = [f_vars[i_prime]]
 
 
@@ -128,6 +127,9 @@ def gen_f_conditions(n, m, total_edges, final_t_var):
 
         for f_i in current_f_vars[:min(m+n, m+n-i_prime)]: # second arg to min is simplified from m+n+2-(i+1)               
             f_condition_5.add_clause([-1*(f_i)] + [x for x in f_i_prime_vars])
+
+        current_f_vars = current_f_vars[min(m+n, m+n-i_prime):]
+
 
 
     last_f_var = final_t_var + m*n*(f_vars[-1] - final_t_var)
@@ -475,6 +477,7 @@ def main(argv):
         for mat in input_matrices:
             n = mat.shape[0]
             m = mat.shape[1]
+            num_internal_nodes = 5
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
 
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
