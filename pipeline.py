@@ -212,7 +212,7 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     total_nodes = 2 * n + m + 1
     i_offset = n*m*(n+m+2)
     final_rct_var = final_edge_var + m*total_nodes
-    final_z_var = final_rct_var + m*total_nodes # dummy variable to keep the exponential blowup from happening in the equivalence
+    final_z_var = final_rct_var + m*num_edges # dummy variable to keep the exponential blowup from happening in the equivalence
     final_ct_var = final_z_var + m*total_nodes
     rct_vars = [r for r in range(final_edge_var + 1, final_rct_var + 1)]
     z_vars = [z for z in range(final_rct_var + 1, final_z_var + 1)]
@@ -234,45 +234,65 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
             rct_condition_3.add_clause([-1*(final_edge_var + i), -1*(final_edge_var + j)])
 
 
-    #CT vars exist for leaves too
-    ct_condition = Condition(list(), False)
-
+    z_condition = Condition(list(), False)
     offset = 0
     clauses = list()
 
     for k in range(m):
-        ct_condition.add_clause([-1*(final_rct_var + k*total_nodes + 1)])
-        for j in range(1,total_nodes):
-            dnf_clauses = [[rct_vars[j+k*total_nodes]]]
-            offset = k*num_edges + j-1
-            
+        for j in range(1, total_nodes):
+            offset = k*num_edges + j - 1
+
+            if j < n+m+1:
+                z_offset = (j*(j-1))//2
+            else:
+                z_offset = (m+n)*(m+n-1)//2
+
             for i in range(min(j, m+n+1)):
-                if i == 0 and j > n + m:
+                z_var = z_vars[k*(num_edges) + z_offset + i]
+
+                if i == 0 and j > (n+m):
                     offset += n+m-1
                     continue
-                
-                dnf_clauses.append([ct_vars[i + k*total_nodes], x_vars[offset]])
+                elif i == 0:
+                    z_condition.add_clause([z_var])
+                    continue
 
-                if i == 0:
-                    offset += m+n-1
-                else:
-                    offset += m+n-(i-1)
+                ct_var = ct_vars[i + k*total_nodes]
+                x_var = x_vars[offset]
+                z_condition.add_clause([ct_var, -z_var])
+                z_condition.add_clause([x_var, -z_var])
+                z_condition.add_clause([-ct_var, -x_var, z_var])
+
+    #CT vars exist for leaves too
+    ct_condition = Condition(list(), False)
+
+
+    for k in range(m):
+        ct_condition.add_clause([-ct_vars[k*total_nodes]])
+
+
+        for j in range(1,total_nodes):
+            ct_var  = ct_vars[j + k*total_nodes]
+            rct_var = rct_vars[j+k*total_nodes]
+            clause = [-ct_var, rct_var]
+            ct_condition.add_clause([ct_var, -rct_var])
+
+            # dnf_clauses = [[rct_vars[j+k*total_nodes]]]
+            if j < n+m+1:
+                z_offset = (j*(j-1))//2
+            else:
+                z_offset = (m+n)*(m+n-1)//2
+
+            for i in range(min(j, m+n+1)):
+                z_var = z_vars[k*num_edges + z_offset + i]
+                clause.append(z_var)
+                ct_condition.add_clause([ct_var, -z_var])
             
-            ct_var = ct_vars[j+k*total_nodes]
-            clauses = list()
-
-            for clause in dnf_clauses:
-                clauses.append([-x for x in clause] + [ct_var])
-
-            sequence = [0 for x in range(len(dnf_clauses))]
-            get_permutations(0, dnf_clauses, ct_var, sequence, clauses)
-
-            for clause in clauses:
-                ct_condition.add_clause(clause)
+            ct_condition.add_clause(clause)
     
     leaf_ct_condition = Condition(list(), False)
 
-    last_ct_internal_var = final_rct_var + m+n+1
+    last_ct_internal_var = z_vars[-1] + m+n+1
     non_zero_indices = input.nonzero()
 
     for k in range(m):
@@ -488,7 +508,15 @@ def main(argv):
             print("generated subtree conditions")
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_ct_var)
             print("generated reticulation node conditions")
-            conditions = tree_conditions + subtree_conditions + reticulation_conditions
+            conditions = tree_conditions + subtree_conditions #+ reticulation_conditions
+
+            with open('test.cnf', 'w+') as f:
+                num_clauses = get_num_clauses(conditions)
+                print("p cnf", final_ct_var, num_clauses, file=f)
+                for condition in conditions:
+                    condition.write_condition(f)
+            
+            results = subprocess.run(['./lingeling/plingeling', 'test.cnf'], capture_output=True)
 
             sat_results = minimize_sat(conditions, final_r_var, m, n, Solver.GLUCOSE_SYRUP, "test.cnf")
 
