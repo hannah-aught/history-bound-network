@@ -212,9 +212,11 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
     total_nodes = 2 * n + m + 1
     i_offset = n*m*(n+m+2)
     final_rct_var = final_edge_var + m*total_nodes
-    final_ct_var = final_rct_var + m*total_nodes
+    final_z_var = final_rct_var + m*total_nodes # dummy variable to keep the exponential blowup from happening in the equivalence
+    final_ct_var = final_z_var + m*total_nodes
     rct_vars = [r for r in range(final_edge_var + 1, final_rct_var + 1)]
-    ct_vars = [c for c in range(final_rct_var + 1, final_ct_var + 1)]
+    z_vars = [z for z in range(final_rct_var + 1, final_z_var + 1)]
+    ct_vars = [c for c in range(final_z_var + 1, final_ct_var + 1)]
     x_vars = [x for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)]
     rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, m*total_nodes, 1)
     rct_condition_2 = Condition([[x for x in range(final_edge_var + 2, final_edge_var + m+n+2)]], True, m, total_nodes)
