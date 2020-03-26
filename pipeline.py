@@ -45,10 +45,13 @@ def gen_t_conditions(n, m, total_nodes, final_i_var):
 
     for k in range(m):
         for j in range(n + m):
+            i_vars = list()
+            t_var = final_i_var + 2 + k*total_nodes + j
             for l in range(n):
-                t_condition.add_clause([-1 * (2 + (n*k+l)*(total_nodes - n + 1) + j), final_i_var + 2 + k*total_nodes + j])
-        
-            t_condition.add_clause([x for x in range((n*k+l-1)*(total_nodes - n + 1) + j + 2, 3 + j + (n*k+n-1)*(total_nodes - n + 1), total_nodes - n + 1)] + [-1 * (final_i_var + 2 + k*total_nodes + j)])
+                i_var = 2 + (n*k+l)*(total_nodes - n + 1) + j
+                t_condition.add_clause([-i_var, t_var])
+                i_vars.append(i_var)
+            t_condition.add_clause([x for x in i_vars] + [-t_var])
 
     final_t_var = final_i_var + m*total_nodes
 
@@ -375,7 +378,7 @@ def gen_reticulation_conditions(n, m, num_edges, final_d_var):
 
 
 def gen_counting_conditions(n, m, goal_count, final_r_var):
-    r_vars = symbols([str(x) for x in range(final_r_var - n, final_r_var + 1)])
+    r_vars = symbols([str(x) for x in range(final_r_var - (m+n-1), final_r_var + 1)])
     c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (n + m + 1)*(goal_count + 1) + 1)])
     c_condition = Condition(list(), False)
 
@@ -511,14 +514,8 @@ def main(argv):
             print("generated subtree conditions")
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_ct_var)
             print("generated reticulation node conditions")
-            conditions = tree_conditions + subtree_conditions #+ reticulation_conditions
+            conditions = tree_conditions + subtree_conditions + reticulation_conditions
 
-            with open('test.cnf', 'w+') as f:
-                num_clauses = get_num_clauses(conditions)
-                print("p cnf", final_ct_var, num_clauses, file=f)
-                for condition in conditions:
-                    condition.write_condition(f)
-            
             results = subprocess.run(['./lingeling/plingeling', 'test.cnf'], capture_output=True)
 
             sat_results = minimize_sat(conditions, final_r_var, m, n, Solver.GLUCOSE_SYRUP, "test.cnf")
