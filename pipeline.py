@@ -334,7 +334,7 @@ def gen_reticulation_conditions(n, m, num_edges, final_d_var):
     offset = 1
 
     for r in r_vars[1:]:
-        print(r, "/", r_vars[-1])
+        #(r, "/", r_vars[-1])
         clauses = list()
         vars = list()
 
@@ -383,7 +383,7 @@ def gen_counting_conditions(n, m, goal_count, final_r_var):
     c_condition = Condition(list(), False)
 
     for k in range(goal_count + 1):
-        print(k, "/", goal_count + 1)
+        #print(k, "/", goal_count + 1)
         for i in range(len(r_vars)):
             current_c_var_index = k*(m+n+1) + i
             sympy_clauses = Implies(c_vars[current_c_var_index], c_vars[current_c_var_index + 1]) 
@@ -509,11 +509,11 @@ def main(argv):
             num_edges = (n+m)*(1 + (n+m-1)//2 + n)
 
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
-            print("generated tree conditions")
+            #print("generated tree conditions")
             subtree_conditions, final_ct_var = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var)
-            print("generated subtree conditions")
+            #print("generated subtree conditions")
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_ct_var)
-            print("generated reticulation node conditions")
+            #print("generated reticulation node conditions")
             conditions = tree_conditions + subtree_conditions + reticulation_conditions
 
             results = subprocess.run(['./lingeling/plingeling', 'test.cnf'], capture_output=True)
