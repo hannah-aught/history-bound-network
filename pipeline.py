@@ -1,3 +1,5 @@
+#!/Library/Frameworks/Python.framework/Versions/3.7/bin/python3
+
 import sys
 import re
 import subprocess
@@ -238,17 +240,17 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
 
 
     z_condition = Condition(list(), False)
-    offset = 0
     clauses = list()
 
     for k in range(m):
+        offset = k*num_edges
         for i in range(total_nodes-n):
-            for j in range(i, total_nodes-1):
+            for j in range(i + 1, total_nodes):
                 z_var = z_vars[offset]
                 ct_var = ct_vars[i + k*total_nodes]
                 x_var = x_vars[offset]
 
-                if i == 0 and j >= (n+m):
+                if i == 0 and j > (n+m):
                     continue
                 elif i == 0:
                     z_condition.add_clause([-z_var])
@@ -282,7 +284,7 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
             else:
                 start = 1
                 stop = m+n+1
-                z_offset = k*num_edges + m + n + (j - m + n)- 1
+                z_offset = k*num_edges + m + n + j - 2
 
             for i in range(start, stop):
                 z_var = z_vars[z_offset]
@@ -321,20 +323,20 @@ def sympy_to_dimacs(expr):
 
     return clauses
 
-def gen_reticulation_conditions(n, m, num_edges, final_d_var):
-    r_vars = [x for x in range(final_d_var +  1, final_d_var + n + m + 1)]
+def gen_reticulation_conditions(n, m, num_edges, final_d_var, final_ct_var):
+    r_vars = [x for x in range(final_ct_var +  1, final_ct_var + 2*n + m + 1)] # r variables for all internal and leaf nodes but not the root bc it's a source
+    leaf_r_vars = r_vars[-n:]
     d_vars = [x for x in range(final_d_var - num_edges + 1, final_d_var + 1)]
-    final_r_var = final_d_var + n + m
+    final_r_var = r_vars[-1]
 
     r_condition = Condition(list(), False)
 
-    r_condition.add_clause([-1*(final_d_var + 1)])
+    r_condition.add_clause([-1*(final_ct_var + 1)])
 
     j_node = 2
     offset = 1
 
     for r in r_vars[1:]:
-        #(r, "/", r_vars[-1])
         clauses = list()
         vars = list()
 
@@ -348,8 +350,8 @@ def gen_reticulation_conditions(n, m, num_edges, final_d_var):
             if i == 0:
                 offset += m+n-1
             else:
-                offset +=  m+n-(i-1)
-        
+                offset +=  m + 2*n - (i + 1)
+
         r_implies_dnf = list()
         clause = list()
         dnf_implies_r = list()
@@ -374,32 +376,34 @@ def gen_reticulation_conditions(n, m, num_edges, final_d_var):
         for clause in clauses:
             r_condition.add_clause(clause)
 
+    
+    for leaf in leaf_r_vars:
+        r_condition.add_clause([-leaf])
+
     return [r_condition], final_r_var
 
 
 def gen_counting_conditions(n, m, goal_count, final_r_var):
-    r_vars = symbols([str(x) for x in range(final_r_var - (m+n-1), final_r_var + 1)])
-    c_vars = symbols([str(x) for x in range(final_r_var + 1, final_r_var + (n + m + 1)*(goal_count + 1) + 1)])
+    r_vars = [r for r in range(final_r_var - (m+2*n - 1), final_r_var + 1)]
+    c_vars = [c for c in range(final_r_var + 1, final_r_var + (len(r_vars) + 1)*(goal_count + 1) + 1)]
     c_condition = Condition(list(), False)
+    num_r_vars = len(r_vars)
+    num_c_vars = len(c_vars)
 
     for k in range(goal_count + 1):
-        #print(k, "/", goal_count + 1)
-        for i in range(len(r_vars)):
-            current_c_var_index = k*(m+n+1) + i
-            sympy_clauses = Implies(c_vars[current_c_var_index], c_vars[current_c_var_index + 1]) 
+        for i in range(num_r_vars):
+            current_c_var_index = k*(num_r_vars + 1) + i
+            c_condition.add_clause([-c_vars[current_c_var_index], c_vars[current_c_var_index + 1]])
 
             if k < goal_count:
-                sympy_clauses = sympy_clauses & Implies(c_vars[current_c_var_index] & r_vars[i], c_vars[(k+1)*(m+n+1) + i + 1])
+                c_condition.add_clause([-c_vars[current_c_var_index], -r_vars[i], c_vars[current_c_var_index + num_r_vars + 2]])
+                # sympy_clauses = sympy_clauses & Implies(c_vars[current_c_var_index] & r_vars[i], c_vars[(k+1)*(m+n+1) + i + 1])
             if k == 0:
-                sympy_clauses = sympy_clauses & Implies(r_vars[i], c_vars[current_c_var_index + 1])
+                c_condition.add_clause([-r_vars[i], c_vars[current_c_var_index + 1]])
+                # sympy_clauses = sympy_clauses & Implies(r_vars[i], c_vars[current_c_var_index + 1])
 
-            sympy_clauses = to_cnf(sympy_clauses)
-            clauses = sympy_to_dimacs(str(sympy_clauses))
+    final_c_var = c_vars[-1]
 
-            for clause in clauses:
-                c_condition.add_clause(clause)
-
-    final_c_var = int(str(c_vars[-1]))
     c_condition.add_clause([-1*final_c_var])
 
     return [c_condition], final_c_var
@@ -413,15 +417,16 @@ def write_cnf_file(conditions, num_vars, num_clauses, cnf_file_path):
             condition.write_condition(f)
 
 def append_to_cnf_file(conditions, num_vars, num_clauses, cnf_file_path):
-    result = subprocess.run(["cp", "temp", cnf_file_path], capture_output=True)
+    with open(cnf_file_path, "w+") as f:
+        s = "p cnf " + str(num_vars) + " " + str(num_clauses) + "\n"
+        f.write(s)
 
-    with open(cnf_file_path, "a") as f:
+        with open("temp") as temp:
+            old_conditions = temp.readlines()
+            f.writelines(old_conditions[1:]) # don't write the old header
+        
         for condition in conditions:
             condition.write_condition(f)
-
-    with open(cnf_file_path, "r+") as f:
-        f.seek(0)
-        f.write("p cnf " + str(num_vars) + " " + str(num_clauses))
 
 def get_num_clauses(conditions):
     num_clauses = 0
@@ -472,13 +477,31 @@ def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_pa
     if bound == -1:
         bound = 0
 
-    results = {"time":total_time, "bound":bound, "runs_required":runs_required}
+    results = {"time":total_time, "bound":bound, "runs_required":runs_required, "method":"SAT"}
     return results
 
-def print_results(results):
-    print("time taken:", results['time'])
-    print("bound:", results['bound'])
-    print("runs required:", results['runs_required'])
+def minimize_dp(file_path):
+    start = time.time()
+    output = str(subprocess.run(["perl", "historybound.pl", file_path], capture_output=True).stdout)
+    end = time.time()
+
+    total_time = end - start
+    bound_start_index = output.find('=') + 2
+    bound_end_index = output.find("\\nA")
+    bound = int(output[bound_start_index:bound_end_index])
+
+    return {"time":total_time, "bound":bound, "method":"DP"}
+
+def print_results(results, matrix):
+    print("----results-----")
+    print("input matrix: \n{}".format(matrix))
+    for result in results:
+        print("\nresults for {}:".format(result["method"]))
+        print("  time taken: {}".format(result["time"]))
+        print("  bound: {}".format(result["bound"]))
+
+        if 'runs_required' in result.keys():
+            print("  runs required: {}".format(result['runs_required']))
 
 def main(argv):
     outdir = "./output"
@@ -505,23 +528,26 @@ def main(argv):
         for mat in input_matrices:
             n = mat.shape[0]
             m = mat.shape[1]
-            num_internal_nodes = 5
-            num_edges = (n+m)*(1 + (n+m-1)//2 + n)
+            num_edges = (n + m) + n * (n+m) + (n+m)*(n+m-1)//2
 
             tree_conditions, final_node_var, final_edge_var = gen_tree_conditions(n, m)
-            #print("generated tree conditions")
             subtree_conditions, final_ct_var = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var)
-            #print("generated subtree conditions")
-            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_ct_var)
-            #print("generated reticulation node conditions")
+            reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_edge_var, final_ct_var)
             conditions = tree_conditions + subtree_conditions + reticulation_conditions
 
-            results = subprocess.run(['./lingeling/plingeling', 'test.cnf'], capture_output=True)
+            sat_results = minimize_sat(conditions, final_r_var, n, m, Solver.GLUCOSE_SYRUP, "test.cnf")
+            with open("./input/temp", "w+") as temp:
+                s = ""
+                for row in mat:
+                    for entry in row:
+                        s += str(int(entry))
+                    s += "\n"
+                temp.write(s)
 
-            sat_results = minimize_sat(conditions, final_r_var, m, n, Solver.GLUCOSE_SYRUP, "test.cnf")
+            dp_results = minimize_dp("./input/temp")
 
-        print_results(sat_results)
+            print_results([sat_results, dp_results], s)
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test4"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test8"])
