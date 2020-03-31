@@ -439,7 +439,7 @@ def get_num_clauses(conditions):
 def call_solver(solver_path, cnf_file_path):
 
     start_time = time.time()
-    result = subprocess.run([solver_path, cnf_file_path], capture_output=True)
+    result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], capture_output=True)
     end_time = time.time()
 
     total_time = end_time - start_time
@@ -462,6 +462,7 @@ def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_pa
         solver_path = "./lingeling/plingeling"
 
     while sat and bound >= 0:
+        print("trying with bound {}".format(bound))
         counting_conditions, final_c_var = gen_counting_conditions(num_rows, num_cols, bound, var_offset)
         num_counting_clauses = get_num_clauses(counting_conditions)
         append_to_cnf_file(counting_conditions, final_c_var, num_clauses + num_counting_clauses, cnf_file_path)
@@ -519,11 +520,15 @@ def main(argv):
     if "-o" in argv:
         outdir = argv[argv.index("-o") + 1]
     if "-s" in argv:
-        solver = argv[argv.index("-s") + 1]
+        solver_name = argv[argv.index("-s") + 1]
+
+        if solver_name == "plingeling":
+            solver = Solver.PLINGELING
 
     for in_file in input_files:
         input_path = "./input/" + in_file
         input_matrices = parse_input(input_path)
+        i = 0
 
         for mat in input_matrices:
             n = mat.shape[0]
@@ -535,7 +540,7 @@ def main(argv):
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_edge_var, final_ct_var)
             conditions = tree_conditions + subtree_conditions + reticulation_conditions
 
-            sat_results = minimize_sat(conditions, final_r_var, n, m, Solver.GLUCOSE_SYRUP, "test.cnf")
+            sat_results = minimize_sat(conditions, final_r_var, n, m, solver, in_file + "_" + str(i) + ".cnf")
             with open("./input/temp", "w+") as temp:
                 s = ""
                 for row in mat:
@@ -544,10 +549,16 @@ def main(argv):
                     s += "\n"
                 temp.write(s)
 
+
+            print_results([sat_results], s)
             dp_results = minimize_dp("./input/temp")
 
-            print_results([sat_results, dp_results], s)
+            print_results([dp_results], s)
+
+            i += 1
+
+            
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose", "test8"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "test10"])
