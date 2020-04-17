@@ -439,7 +439,7 @@ def get_num_clauses(conditions):
 def call_solver(solver_path, cnf_file_path):
 
     start_time = time.time()
-    result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], capture_output=True)
+    result = subprocess.run([solver_path, cnf_file_path], capture_output=True)
     end_time = time.time()
 
     total_time = end_time - start_time
@@ -462,13 +462,14 @@ def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_pa
         solver_path = "./lingeling/plingeling"
 
     while sat and bound >= 0:
-        print("trying with bound {}".format(bound))
         counting_conditions, final_c_var = gen_counting_conditions(num_rows, num_cols, bound, var_offset)
         num_counting_clauses = get_num_clauses(counting_conditions)
         append_to_cnf_file(counting_conditions, final_c_var, num_clauses + num_counting_clauses, cnf_file_path)
         time, sat = call_solver(solver_path, cnf_file_path)
         runs_required += 1
         total_time += time
+        print("bound {}, {}, time so far: {}".format(bound, "SAT" if sat else "UNSAT", total_time))
+
 
         if sat:
             bound -= 1
@@ -479,6 +480,7 @@ def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_pa
         bound = 0
 
     results = {"time":total_time, "bound":bound, "runs_required":runs_required, "method":"SAT"}
+    subprocess.run(["rm", "temp"])
     return results
 
 def minimize_dp(file_path):
@@ -493,9 +495,8 @@ def minimize_dp(file_path):
 
     return {"time":total_time, "bound":bound, "method":"DP"}
 
-def print_results(results, matrix):
-    print("----results-----")
-    print("input matrix: \n{}".format(matrix))
+def print_results(results, input_name):
+    print("\n----results for {}-----".format(input_name))
     for result in results:
         print("\nresults for {}:".format(result["method"]))
         print("  time taken: {}".format(result["time"]))
@@ -503,6 +504,8 @@ def print_results(results, matrix):
 
         if 'runs_required' in result.keys():
             print("  runs required: {}".format(result['runs_required']))
+
+    print("\n")
 
 def main(argv):
     outdir = "./output"
@@ -539,8 +542,9 @@ def main(argv):
             subtree_conditions, final_ct_var = gen_subtree_conditions(mat, n, m, num_edges, final_node_var, final_edge_var)
             reticulation_conditions, final_r_var = gen_reticulation_conditions(n, m, num_edges, final_edge_var, final_ct_var)
             conditions = tree_conditions + subtree_conditions + reticulation_conditions
+            input_name = in_file + "_" + str(i)
 
-            sat_results = minimize_sat(conditions, final_r_var, n, m, solver, in_file + "_" + str(i) + ".cnf")
+            sat_results = minimize_sat(conditions, final_r_var, n, m, solver, input_name + ".cnf")
             with open("./input/temp", "w+") as temp:
                 s = ""
                 for row in mat:
@@ -549,11 +553,9 @@ def main(argv):
                     s += "\n"
                 temp.write(s)
 
+            #dp_results = minimize_dp("./input/temp")
 
-            print_results([sat_results], s)
-            dp_results = minimize_dp("./input/temp")
-
-            print_results([dp_results], s)
+            print_results([sat_results], input_name)
 
             i += 1
 
@@ -561,4 +563,4 @@ def main(argv):
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "test10"])
+main(["pipeline.py", "-o", "test_output", "-s", "plingeling", "test16x10"])
