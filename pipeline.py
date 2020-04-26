@@ -20,10 +20,12 @@ def parse_input(path):
         start_indices = np.asarray([i for i, line in enumerate(lines) if "//" in line] + [len(lines) + 1])
         m = int(lines[start_indices[0] + 1][len("segsites: "):])
         n = start_indices[1] - start_indices[0] - 4
-        mats = np.ndarray((len(start_indices) - 1, n, m))
+        mats = list()
 
         for i, j in enumerate(start_indices[:-1] + 3):
-            mats[i] = np.asarray([list(line.rstrip()) for line in lines[j:(start_indices[i + 1] - 1)]])
+            mat = np.asarray([list(line.rstrip()) for line in lines[j:(start_indices[i+1] - 1)]], dtype='float64')
+            mat = mat[:, ~np.all(mat == 0, axis = 0)]
+            mats.append(mat)
 
     return mats
 
@@ -439,7 +441,7 @@ def get_num_clauses(conditions):
 def call_solver(solver_path, cnf_file_path):
 
     start_time = time.time()
-    result = subprocess.run([solver_path, cnf_file_path], capture_output=True)
+    result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], capture_output=True)
     end_time = time.time()
 
     total_time = end_time - start_time
@@ -553,9 +555,9 @@ def main(argv):
                     s += "\n"
                 temp.write(s)
 
-            #dp_results = minimize_dp("./input/temp")
+            dp_results = minimize_dp("./input/temp")
 
-            print_results([sat_results], input_name)
+            print_results([sat_results, dp_results], input_name)
 
             i += 1
 
@@ -563,4 +565,4 @@ def main(argv):
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "plingeling", "test16x10"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "data4", "data5"])
