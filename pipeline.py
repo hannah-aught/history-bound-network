@@ -441,7 +441,8 @@ def get_num_clauses(conditions):
 def call_solver(solver_path, cnf_file_path):
 
     start_time = time.time()
-    result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], capture_output=True)
+    #result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], capture_output=True)
+    result = subprocess.run([solver_path, "-nthreads=12", cnf_file_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     end_time = time.time()
 
     total_time = end_time - start_time
@@ -565,4 +566,4 @@ def main(argv):
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "data4", "data5"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "data4_test", "data5"])
