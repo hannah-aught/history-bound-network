@@ -7,8 +7,6 @@ import numpy as np
 import time
 from enum import Enum
 from Condition import Condition
-from sympy.logic.boolalg import to_cnf, Equivalent, Implies, simplify_logic
-from sympy import symbols
 
 class Solver(Enum):
     PLINGELING = 0
@@ -174,6 +172,7 @@ def gen_x_conditions(n, m, total_edges, last_f_var, f_vars):
 
     return x_condition, last_x_var, x_vars
 
+
 def gen_d_conditions(n, m, total_edges, last_x_var, x_vars):
     d_condition = Condition(list(), False)
     d_vars = list(range(last_x_var + 1, last_x_var + total_edges + 1))
@@ -185,6 +184,7 @@ def gen_d_conditions(n, m, total_edges, last_x_var, x_vars):
 
     return d_condition, d_vars[-1]
 
+
 def gen_tree_conditions(n, m):
     # Have adjacency mat for edges?
     # characters = columns
@@ -194,65 +194,64 @@ def gen_tree_conditions(n, m):
     total_edges = num_internal_nodes + (num_internal_nodes*(num_internal_nodes-1))//2 + num_internal_nodes*n
 
     i_conditions, final_i_var = gen_i_conditions(n, m, total_nodes) # Conditions for each node being included in a commodity tree with flow passing through them to a specific leaf
+    print("i vars start at: 1")
     t_conditions, final_t_var = gen_t_conditions(n, m, total_nodes, final_i_var) # Conditions for each node being included in a commodity tree
+    print("t vars start at:", final_i_var + 1)
     f_conditions, final_f_var, f_vars = gen_f_conditions(n, m, total_edges, final_t_var) # Conditions for each edge being included in a commodity tree going to a specific leaf
+    print("f vars start at:", final_t_var + 1)
     x_conditions, final_x_var, x_vars = gen_x_conditions(n, m, total_edges, final_f_var, f_vars) # Condition for edges being included in a commodity tree
+    print("x vars start at:", final_f_var + 1)
     d_conditions, final_d_var = gen_d_conditions(n, m, total_edges, final_x_var, x_vars) # Condition for edges being included in the DAG
+    print("d vars start at:", final_x_var + 1)
 
     conditions = i_conditions + t_conditions + f_conditions + [x_conditions] + [d_conditions]
     return conditions, final_t_var, final_d_var
 
-def get_permutations(i, dnf_vars, ct_var, sequence, sequences):
-    if (i == len(dnf_vars)):
-        sequences.append(sequence + [-1 * ct_var])
-        return
-    
-    sequence[i] = dnf_vars[i][0]
-    get_permutations(i+1, dnf_vars, ct_var, sequence, sequences)
 
-    if (len(dnf_vars[i]) > 1):
-        sequence[i] = dnf_vars[i][1]
-        get_permutations(i+1, dnf_vars, ct_var, sequence, sequences)
-
-def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_var):
-    conditions = list()
-    total_nodes = 2 * n + m + 1
-    i_offset = n*m*(n+m+2)
-    final_rct_var = final_edge_var + m*total_nodes
-    final_z_var = final_rct_var + m*num_edges # dummy variable to keep the exponential blowup from happening in the equivalence
-    final_ct_var = final_z_var + m*total_nodes
+def gen_rct_conditions(num_rows, num_cols, total_nodes, final_edge_var):
+    final_rct_var = final_edge_var + num_cols*total_nodes
     rct_vars = [r for r in range(final_edge_var + 1, final_rct_var + 1)]
-    z_vars = [z for z in range(final_rct_var + 1, final_z_var + 1)]
-    ct_vars = [c for c in range(final_z_var + 1, final_ct_var + 1)]
-    x_vars = [x for x in range(final_edge_var - (m+1)*num_edges + 1, final_edge_var - num_edges + 1)]
-    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, m*total_nodes, 1)
-    rct_condition_2 = Condition([[x for x in range(final_edge_var + 2, final_edge_var + m+n+2)]], True, m, total_nodes)
+    i_offset = num_rows*num_cols*(num_rows + num_cols + 2)
+
+    print("rct vars start at:", rct_vars[0])
+
+    rct_condition_1 = Condition([[i_offset + 1, -1*(final_edge_var + 1)]], True, num_cols*total_nodes, 1)
+    rct_condition_2 = Condition([[x for x in range(final_edge_var + 2, final_edge_var + num_cols+num_rows+2)]], True, num_cols, total_nodes)
     
     # Root can't be the root of the subtree
     rct_condition_2.add_clause([-1*(final_edge_var + 1)])
 
-    for x in range(m+n+2, m+2*n+2):
+    for x in range(num_cols+num_rows+2, num_cols+2*num_rows+2):
         rct_condition_2.add_clause([-1*(x+final_edge_var)])
 
-    rct_condition_3 = Condition(list(), True, m, total_nodes)
+    rct_condition_3 = Condition(list(), True, num_cols, total_nodes)
 
     for i in range(2, total_nodes):
         for j in range(i+1, total_nodes + 1):
             rct_condition_3.add_clause([-1*(final_edge_var + i), -1*(final_edge_var + j)])
 
+    return [rct_condition_1, rct_condition_2, rct_condition_3], rct_vars
+
+
+def gen_z_conditions(num_rows, num_cols, num_edges, total_nodes, final_edge_var, final_rct_var):
+    final_z_var = final_rct_var + num_cols*num_edges
+    final_ct_var = final_z_var + num_cols * total_nodes
+    z_vars = [z for z in range(final_rct_var + 1, final_z_var + 1)]
+    x_vars = [x for x in range(final_edge_var - (num_cols+1)*num_edges + 1, final_edge_var - num_edges + 1)]
+    ct_vars = [c for c in range(final_z_var + 1, final_ct_var + 1)]
 
     z_condition = Condition(list(), False)
     clauses = list()
 
-    for k in range(m):
+    for k in range(num_cols):
         offset = k*num_edges
-        for i in range(total_nodes-n):
+        for i in range(total_nodes-num_rows):
             for j in range(i + 1, total_nodes):
                 z_var = z_vars[offset]
                 ct_var = ct_vars[i + k*total_nodes]
                 x_var = x_vars[offset]
 
-                if i == 0 and j > (n+m):
+                if i == 0 and j > (num_rows+num_cols):
                     continue
                 elif i == 0:
                     z_condition.add_clause([-z_var])
@@ -266,11 +265,16 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
                 offset += 1
 
 
-    #CT vars exist for leaves too
+    return [z_condition], z_vars
+
+
+def gen_ct_conditions(input, num_rows, num_cols, num_edges, total_nodes, rct_vars, z_vars):
+    final_z_var = z_vars[-1]
+    final_ct_var = final_z_var + num_cols * total_nodes
+    ct_vars = [c for c in range(final_z_var + 1, final_ct_var + 1)]
     ct_condition = Condition(list(), False)
 
-
-    for k in range(m):
+    for k in range(num_cols):
         ct_condition.add_clause([-ct_vars[k*total_nodes]])
 
         for j in range(1,total_nodes):
@@ -279,14 +283,14 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
             clause = [-ct_var, rct_var]
             ct_condition.add_clause([ct_var, -rct_var])
 
-            if j < n+m+1:
+            if j < num_rows+num_cols+1:
                 start = 0
                 stop = j
                 z_offset = k*num_edges + j - 1
             else:
                 start = 1
-                stop = m+n+1
-                z_offset = k*num_edges + m + n + j - 2
+                stop = num_cols+num_rows+1
+                z_offset = k*num_edges + num_cols + num_rows + j - 2
 
             for i in range(start, stop):
                 z_var = z_vars[z_offset]
@@ -294,36 +298,38 @@ def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_va
                 ct_condition.add_clause([ct_var, -z_var])
 
                 if i == 0:
-                    z_offset += m + n - 1
+                    z_offset += num_cols + num_rows - 1
                 else:
-                    z_offset += m + 2*n - i - 1
+                    z_offset += num_cols + 2*num_rows - i - 1
             
             ct_condition.add_clause(clause)
     
     leaf_ct_condition = Condition(list(), False)
 
-    last_ct_internal_var = z_vars[-1] + m+n+1
+    last_ct_internal_var = z_vars[-1] + num_cols+num_rows+1
     non_zero_indices = input.nonzero()
 
-    for k in range(m):
+    for k in range(num_cols):
         true_ct_vars = non_zero_indices[0][np.where(non_zero_indices[1] == k)]
         
-        for l in range(n):
+        for l in range(num_rows):
             if l in true_ct_vars:
                 leaf_ct_condition.add_clause([last_ct_internal_var + k*total_nodes + l + 1])
             else:
                 leaf_ct_condition.add_clause([-1*(last_ct_internal_var + k*total_nodes + l + 1)])
+    
+    return [ct_condition, leaf_ct_condition], final_ct_var
 
-    return [rct_condition_1, rct_condition_2, rct_condition_3, z_condition, ct_condition, leaf_ct_condition], abs(leaf_ct_condition.clauses[-1][0])
 
-def sympy_to_dimacs(expr):
-    clauses = expr.split('&')
+def gen_subtree_conditions(input, n, m, num_edges, final_node_var, final_edge_var):
+    conditions = list()
+    total_nodes = 2 * n + m + 1
+    rct_conditions, rct_vars = gen_rct_conditions(n, m, total_nodes, final_edge_var)
+    z_conditions, z_vars = gen_z_conditions(n, m, num_edges, total_nodes, final_edge_var, rct_vars[-1])
+    ct_conditions, final_ct_var = gen_ct_conditions(input, n, m, num_edges, total_nodes, rct_vars, z_vars)
 
-    for i, clause in enumerate(clauses):
-        clause = clause.strip().replace(" | ", " ").replace("(", "").replace(")", "").replace("~", "-")
-        clauses[i] = [int(x) for x in clause.split(" ")]
+    return rct_conditions + z_conditions + ct_conditions, final_ct_var
 
-    return clauses
 
 def gen_reticulation_conditions(n, m, num_edges, final_d_var, final_ct_var):
     r_vars = [x for x in range(final_ct_var +  1, final_ct_var + 2*n + m + 1)] # r variables for all internal and leaf nodes but not the root bc it's a source
@@ -473,7 +479,6 @@ def minimize_sat(conditions, var_offset, num_rows, num_cols, solver, cnf_file_pa
         total_time += time
         print("bound {}, {}, time so far: {}".format(bound, "SAT" if sat else "UNSAT", total_time))
 
-
         if sat:
             bound -= 1
         else:
@@ -566,4 +571,4 @@ def main(argv):
     
     return
 
-main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "data4_test", "data5"])
+main(["pipeline.py", "-o", "test_output", "-s", "glucose-syrup", "test5x7"])
